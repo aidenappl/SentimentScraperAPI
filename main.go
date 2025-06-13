@@ -7,6 +7,7 @@ import (
 
 	"github.com/aidenappl/SentimentScraperAPI/db"
 	"github.com/aidenappl/SentimentScraperAPI/env"
+	"github.com/aidenappl/SentimentScraperAPI/routers"
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
 )
@@ -23,19 +24,25 @@ func main() {
 	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Welcome to the SentimentScraper API!"))
-	}).Methods("GET")
+	}).Methods(http.MethodGet)
 
 	// Health Check Endpoint
 	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))
-	}).Methods("GET")
+	}).Methods(http.MethodGet)
+
+	// Core V1 API Endpoint
+	core := r.PathPrefix("/core/v1/").Subrouter()
+
+	// Get All News
+	core.HandleFunc("/trending", routers.GetTrendingNews).Methods(http.MethodGet)
 
 	// CORS Middleware
 	corsMiddleware := cors.New(cors.Options{
 		AllowedOrigins: []string{
 			"http://localhost:3000",
-			"https://rootedtogether.info",
+			"https://newsfilter.io",
 		},
 		AllowCredentials: true,
 		AllowedHeaders:   []string{"*"},
