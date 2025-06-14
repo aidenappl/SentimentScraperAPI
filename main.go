@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
+	"github.com/aidenappl/SentimentScraperAPI/background"
 	"github.com/aidenappl/SentimentScraperAPI/db"
 	"github.com/aidenappl/SentimentScraperAPI/env"
 	"github.com/aidenappl/SentimentScraperAPI/routers"
@@ -37,6 +39,15 @@ func main() {
 
 	// Get All News
 	core.HandleFunc("/trending", routers.GetTrendingNews).Methods(http.MethodGet)
+	core.HandleFunc("/hydrateTickers", routers.HydrateTickers).Methods(http.MethodPost)
+
+	// Background Handler
+	go func() {
+		for {
+			background.NewsFilter()
+			time.Sleep(5 * time.Minute)
+		}
+	}()
 
 	// CORS Middleware
 	corsMiddleware := cors.New(cors.Options{
