@@ -17,3 +17,9 @@ const (
 	DefaultListLimit = 25
 	MaximumListLimit = 500
 )
+
+type GeneralNSN struct {
+	ID        *int    `json:"id"`         // Unique identifier for the status
+	Name      *string `json:"name"`       // Name of the status
+	ShortName *string `json:"short_name"` // Short name or code for the status
+}

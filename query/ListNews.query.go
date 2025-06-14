@@ -54,12 +54,18 @@ func ListNews(dbc db.Queryable, req ListNewsRequest) ([]structs.News, error) {
 		"snt.language",
 		"snt.source",
 		"snt.processed_at",
+		"snt.inserted_at",
+
+		"snt_status.id",
+		"snt_status.name",
+		"snt_status.short_name",
 	).
 		From("website.news n").
-		GroupBy("n.id", "s.id", "snt.id").
+		GroupBy("n.id", "s.id", "snt.id", "snt_status.id").
 		LeftJoin("website.outlets s ON s.id = n.article_source").
 		LeftJoin("website.sentiment snt ON snt.news_id = n.id").
 		LeftJoin("website.company_associations ca ON ca.news_id = n.id").
+		LeftJoin("website.sentiment_statuses snt_status ON snt.status = snt_status.id").
 		LeftJoin("website.companies c ON c.id = ca.company_id")
 
 	if req.Limit != nil {
@@ -93,6 +99,7 @@ func ListNews(dbc db.Queryable, req ListNewsRequest) ([]structs.News, error) {
 		var articleSource structs.Outlet
 		var companies string
 		var sentiment structs.Sentiment
+		var sentimentStatus structs.GeneralNSN
 		err := rows.Scan(
 			&newsItem.ID,
 			&newsItem.Title,
@@ -124,6 +131,11 @@ func ListNews(dbc db.Queryable, req ListNewsRequest) ([]structs.News, error) {
 			&sentiment.Language,
 			&sentiment.Source,
 			&sentiment.ProcessedAt,
+			&sentiment.InsertedAt,
+
+			&sentimentStatus.ID,
+			&sentimentStatus.Name,
+			&sentimentStatus.ShortName,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("error scanning rows: %w", err)
@@ -131,6 +143,7 @@ func ListNews(dbc db.Queryable, req ListNewsRequest) ([]structs.News, error) {
 		newsItem.ArticleSource = &articleSource
 		if sentiment.ID != nil {
 			newsItem.Sentiment = &sentiment
+			newsItem.Sentiment.Status = &sentimentStatus
 		} else {
 			newsItem.Sentiment = nil
 		}
