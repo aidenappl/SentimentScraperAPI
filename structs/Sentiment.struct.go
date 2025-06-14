@@ -1,0 +1,17 @@
+package structs
+
+type Sentiment struct {
+	ID               *int     `json:"id"`                // Unique identifier for the sentiment analysis
+	NewsID           *int     `json:"news_id"`           // ID of the associated news item
+	SentimentSummary *string  `json:"sentiment_summary"` // Summary of the sentiment analysis
+	Score            *float64 `json:"score"`             // Overall sentiment score
+	Positive         *float64 `json:"positive"`          // Positive sentiment score
+	Negative         *float64 `json:"negative"`          // Negative sentiment score
+	Neutral          *float64 `json:"neutral"`           // Neutral sentiment score
+	Confidence       *float64 `json:"confidence"`        // Confidence score of the sentiment analysis
+	Polarity         *string  `json:"polarity"`          // Polarity of the sentiment (e.g., positive, negative, neutral)
+	Subjectivity     *float64 `json:"subjectivity"`      // Subjectivity score of the sentiment analysis
+	Language         *string  `json:"language"`          // Language of the sentiment analysis
+	Source           *string  `json:"source"`
+	ProcessedAt      *string  `json:"processed_at"`
+}

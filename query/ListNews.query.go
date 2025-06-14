@@ -39,10 +39,26 @@ func ListNews(dbc db.Queryable, req ListNewsRequest) ([]structs.News, error) {
 
 		// Companies Arr
 		"array_agg(c.ticker) AS companies",
+
+		// Sentiment
+		"snt.id",
+		"snt.news_id",
+		"snt.sentiment_summary",
+		"snt.score",
+		"snt.positive",
+		"snt.negative",
+		"snt.neutral",
+		"snt.confidence",
+		"snt.polarity",
+		"snt.subjectivity",
+		"snt.language",
+		"snt.source",
+		"snt.processed_at",
 	).
 		From("website.news n").
-		GroupBy("n.id", "s.id").
+		GroupBy("n.id", "s.id", "snt.id").
 		LeftJoin("website.outlets s ON s.id = n.article_source").
+		LeftJoin("website.sentiment snt ON snt.news_id = n.id").
 		LeftJoin("website.company_associations ca ON ca.news_id = n.id").
 		LeftJoin("website.companies c ON c.id = ca.company_id")
 
@@ -76,6 +92,7 @@ func ListNews(dbc db.Queryable, req ListNewsRequest) ([]structs.News, error) {
 		var newsItem structs.News
 		var articleSource structs.Outlet
 		var companies string
+		var sentiment structs.Sentiment
 		err := rows.Scan(
 			&newsItem.ID,
 			&newsItem.Title,
@@ -93,11 +110,30 @@ func ListNews(dbc db.Queryable, req ListNewsRequest) ([]structs.News, error) {
 			&articleSource.InsertedAt,
 
 			&companies,
+
+			&sentiment.ID,
+			&sentiment.NewsID,
+			&sentiment.SentimentSummary,
+			&sentiment.Score,
+			&sentiment.Positive,
+			&sentiment.Negative,
+			&sentiment.Neutral,
+			&sentiment.Confidence,
+			&sentiment.Polarity,
+			&sentiment.Subjectivity,
+			&sentiment.Language,
+			&sentiment.Source,
+			&sentiment.ProcessedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("error scanning rows: %w", err)
 		}
 		newsItem.ArticleSource = &articleSource
+		if sentiment.ID != nil {
+			newsItem.Sentiment = &sentiment
+		} else {
+			newsItem.Sentiment = nil
+		}
 		if companies != "" {
 			// Split the companies string into a slice
 			companies = strings.TrimSpace(companies)

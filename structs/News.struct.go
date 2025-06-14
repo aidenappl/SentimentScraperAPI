@@ -11,7 +11,8 @@ type News struct {
 	DataPipelineID   *string    `json:"data_pipeline_id"`
 	UniquePipelineID *string    `json:"unique_pipeline_id"`
 	ArticleURL       *string    `json:"article_url"`
-	Companies        *[]Company `json:"companies,omitempty"`
-	Tickers          *[]string  `json:"tickers,omitempty"`
+	Companies        *[]Company `json:"companies"`
+	Tickers          *[]string  `json:"tickers"`
+	Sentiment        *Sentiment `json:"sentiment"`
 	InsertedAt       *time.Time `json:"inserted_at"`
 }
