@@ -77,7 +77,7 @@ func main() {
 	corsMiddleware := cors.New(cors.Options{
 		AllowedOrigins: []string{
 			"http://localhost:3000",
-			"https://newsfilter.io",
+			"https://sentimentscraper.com",
 		},
 		AllowCredentials: true,
 		AllowedHeaders:   []string{"*"},
