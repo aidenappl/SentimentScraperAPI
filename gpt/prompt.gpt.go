@@ -22,7 +22,8 @@ ARTICLE:
 Title: %s
 Summary: %s
 Publisher: %s
+Body: %s
 
 Return only a JSON object with keys matching exactly the struct fields.
-`, *article.Title, *article.SummaryText, article.ArticleSource.Name)
+`, *article.Title, *article.SummaryText, article.ArticleSource.Name, *article.BodyContent)
 }

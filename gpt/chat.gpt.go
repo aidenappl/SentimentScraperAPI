@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/aidenappl/SentimentScraperAPI/env"
 	"github.com/aidenappl/SentimentScraperAPI/structs"
@@ -24,6 +25,8 @@ type ChatMessage struct {
 
 func FetchSentimentFromChatGPT(article structs.News) (*structs.Sentiment, error) {
 
+	formS := strings.ReplaceAll(*article.BodyContent, "\n", " ") // Clean up newlines
+	article.BodyContent = &formS
 	prompt := buildPrompt(article)
 
 	requestBody := OpenAIRequest{
@@ -36,12 +39,12 @@ func FetchSentimentFromChatGPT(article structs.News) (*structs.Sentiment, error)
 
 	payload, err := json.Marshal(requestBody)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal request body: %w", err)
 	}
 
 	req, err := http.NewRequest("POST", "https://api.openai.com/v1/chat/completions", bytes.NewBuffer(payload))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+env.OpenAIKey)
@@ -50,9 +53,14 @@ func FetchSentimentFromChatGPT(article structs.News) (*structs.Sentiment, error)
 	client := &http.Client{}
 	res, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to send request to OpenAI: %w", err)
 	}
 	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("OpenAI API error: %s", body)
+	}
 
 	body, _ := io.ReadAll(res.Body)
 

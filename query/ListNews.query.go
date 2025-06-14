@@ -14,6 +14,8 @@ type ListNewsRequest struct {
 	Offset *int    `json:"offset"`
 	Sort   *string `json:"sort"`
 
+	HasBodyContent *bool `json:"has_body_content"`
+
 	// Selectors
 	ID *int `json:"id"`
 }
@@ -29,6 +31,8 @@ func ListNews(dbc db.Queryable, req ListNewsRequest) ([]structs.News, error) {
 		"n.unique_pipeline_id",
 		"n.article_url",
 		"n.inserted_at",
+		"n.body_content",
+		"n.authors",
 
 		// Article Source Join
 		"s.id",
@@ -85,6 +89,10 @@ func ListNews(dbc db.Queryable, req ListNewsRequest) ([]structs.News, error) {
 		q = q.Where(sq.Eq{"n.id": *req.ID})
 	}
 
+	if req.HasBodyContent != nil && !*req.HasBodyContent {
+		q = q.Where(sq.Or{sq.Eq{"n.body_content": nil}, sq.Eq{"n.body_content": ""}})
+	}
+
 	query, args, err := q.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("error building SQL query: %w", err)
@@ -110,6 +118,8 @@ func ListNews(dbc db.Queryable, req ListNewsRequest) ([]structs.News, error) {
 			&newsItem.UniquePipelineID,
 			&newsItem.ArticleURL,
 			&newsItem.InsertedAt,
+			&newsItem.BodyContent,
+			&newsItem.Authors,
 
 			&articleSource.ID,
 			&articleSource.Name,

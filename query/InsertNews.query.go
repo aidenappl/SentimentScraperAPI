@@ -14,6 +14,8 @@ type InsertNewsRequest struct {
 	ArticleSourceID  int    `json:"article_source_id"`
 	UniquePipelineID string `json:"unique_pipeline_id"`
 	DataPipelineID   int    `json:"data_pipeline_id"`
+	BodyContent      string `json:"body_content"`
+	Authors          string `json:"authors"`
 }
 
 func InsertNews(dbc db.Queryable, newsItem structs.NewsItem, newsMetadata InsertNewsRequest) error {
@@ -35,6 +37,8 @@ func InsertNews(dbc db.Queryable, newsItem structs.NewsItem, newsMetadata Insert
 			"data_pipeline_id",
 			"unique_pipeline_id",
 			"article_url",
+			"body_content",
+			"authors",
 		).
 		Values(
 			newsItem.Article.Title,
@@ -44,6 +48,8 @@ func InsertNews(dbc db.Queryable, newsItem structs.NewsItem, newsMetadata Insert
 			newsMetadata.DataPipelineID,
 			newsMetadata.UniquePipelineID,
 			newsItem.Article.URL,
+			newsMetadata.BodyContent,
+			newsMetadata.Authors,
 		).Suffix("RETURNING id")
 
 	query, args, err := q.ToSql()

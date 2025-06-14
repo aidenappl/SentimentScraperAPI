@@ -15,4 +15,6 @@ type News struct {
 	Tickers          *[]string  `json:"tickers"`
 	Sentiment        *Sentiment `json:"sentiment"`
 	InsertedAt       *time.Time `json:"inserted_at"`
+	BodyContent      *string    `json:"body_content"`
+	Authors          *string    `json:"authors"`
 }

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -22,6 +21,8 @@ func main() {
 	// Ping DB
 	if err := db.PingDB(); err != nil {
 		log.Fatalf("❌ Failed to connect to the database: %v", err)
+	} else {
+		log.Println("✅ Connected to the database successfully")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -69,6 +70,7 @@ func main() {
 			log.Println("📰 Fetching feeds...")
 			state.HydrateNewsCache()
 			background.NewsFilter()
+			background.CheckCrawlers()
 			time.Sleep(1 * time.Minute)
 		}
 	}()
@@ -84,6 +86,6 @@ func main() {
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 	})
 
-	fmt.Printf("✅ SentimentScraper API running on port %s\n", env.Port)
+	log.Printf("✅ SentimentScraper API running on port %s\n", env.Port)
 	log.Fatal(http.ListenAndServe(":"+env.Port, corsMiddleware.Handler(r)))
 }

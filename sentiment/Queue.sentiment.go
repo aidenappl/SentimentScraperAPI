@@ -35,6 +35,10 @@ func QueueSentimentProcessing(news *structs.News) {
 }
 
 func processNewsSentiment(news *structs.News) {
+	if news == nil || news.Sentiment == nil || news.BodyContent == nil {
+		log.Println("❌ News or its required fields are nil. Skipping.")
+		return
+	}
 	news.Sentiment.StatusID = tools.IntP(3) // Set status to "Processing"
 	err := query.UpdateSentiment(db.DB, news.Sentiment)
 	if err != nil {
@@ -45,20 +49,24 @@ func processNewsSentiment(news *structs.News) {
 	gptSentiment, err := gpt.FetchSentimentFromChatGPT(*news)
 	if err != nil {
 		log.Println("❌ Failed to fetch sentiment from ChatGPT:", err)
+		return
 	}
 
-	senti, err := GenerateSentiment(*news.SummaryText)
+	senti, err := GenerateSentiment(*news.BodyContent)
 	if err != nil {
 		log.Println("❌ Failed to generate sentiment:", err)
+		return
 	}
 
-	vsenti, err := GenerateVaderSentiment(*news.SummaryText)
+	vsenti, err := GenerateVaderSentiment(*news.BodyContent)
 	if err != nil {
 		log.Println("❌ Failed to generate VADER sentiment:", err)
+		return
 	}
 
 	if gptSentiment == nil {
 		log.Println("❌ GPT sentiment analysis returned nil")
+		return
 	} else {
 		news.Sentiment.SentimentSummary = gptSentiment.SentimentSummary
 		news.Sentiment.Score = gptSentiment.Score
@@ -84,12 +92,14 @@ func processNewsSentiment(news *structs.News) {
 		news.Sentiment.VaderComp = &comp
 	} else {
 		log.Println("❌ VADER sentiment analysis returned nil")
+		return
 	}
 
 	if senti != nil {
 		news.Sentiment.MultitextClass = senti
 	} else {
 		log.Println("❌ Sentiment analysis returned nil")
+		return
 	}
 
 	nowTime := time.Now().UTC()
