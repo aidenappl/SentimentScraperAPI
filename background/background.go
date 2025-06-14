@@ -23,13 +23,21 @@ func NewsFilter() {
 	}
 
 	for _, item := range news {
-		log.Printf("📰 %s: %s\n", item.Article.Title, item.Article.Source.Name)
-		err := query.InsertNews(db.DB, item)
+		outlet, err := query.FindOrAddNewsSource(db.DB, query.FindOrAddNewsSourceRequest{Name: item.Article.Source.Name})
+		if err != nil {
+			log.Printf("❌ Error fetching news source: %v\n", err)
+			continue
+		}
+		err = query.InsertNews(db.DB, item, query.InsertNewsRequest{
+			ArticleSourceID:  outlet.ID,
+			UniquePipelineID: item.ID,
+			DataPipelineID:   1,
+		})
 		if err != nil {
 			log.Printf("❌ Error inserting news item: %v\n", err)
 			continue
 		}
-		log.Printf("✅ Successfully inserted news item: %s\n", item.Article.Title)
 	}
+	log.Println("✅ News items processed or inserted successfully")
 
 }

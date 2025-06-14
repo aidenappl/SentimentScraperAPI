@@ -9,7 +9,9 @@ import (
 	"github.com/aidenappl/SentimentScraperAPI/background"
 	"github.com/aidenappl/SentimentScraperAPI/db"
 	"github.com/aidenappl/SentimentScraperAPI/env"
+	"github.com/aidenappl/SentimentScraperAPI/middleware"
 	"github.com/aidenappl/SentimentScraperAPI/routers"
+	"github.com/aidenappl/SentimentScraperAPI/state"
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
 )
@@ -20,7 +22,18 @@ func main() {
 		log.Fatalf("❌ Failed to connect to the database: %v", err)
 	}
 
+	// Hydrate News Cache
+	err := state.HydrateNewsCache()
+	if err != nil {
+		log.Fatalf("❌ Failed to hydrate news cache: %v", err)
+	} else {
+		log.Println("✅ News cache hydrated successfully")
+	}
+
 	r := mux.NewRouter()
+
+	// Request logger
+	r.Use(middleware.LoggingMiddleware)
 
 	// Base API Endpoint
 	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -40,12 +53,16 @@ func main() {
 	// Get All News
 	core.HandleFunc("/trending", routers.GetTrendingNews).Methods(http.MethodGet)
 	core.HandleFunc("/hydrateTickers", routers.HydrateTickers).Methods(http.MethodPost)
+	core.HandleFunc("/news", routers.ListNews).Methods(http.MethodGet)
+	core.HandleFunc("/news/{id}", routers.GetNews).Methods(http.MethodGet)
 
-	// Background Handler
+	// Background Handlers
 	go func() {
 		for {
+			log.Println("📰 Fetching Google RSS feeds...")
+			state.HydrateNewsCache()
 			background.NewsFilter()
-			time.Sleep(5 * time.Minute)
+			time.Sleep(1 * time.Minute)
 		}
 	}()
 

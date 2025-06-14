@@ -41,6 +41,8 @@ var DB = func() *sql.DB {
 
 var Psql = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
+var ErrNoRows = sql.ErrNoRows
+
 type Queryable interface {
 	Exec(query string, args ...interface{}) (sql.Result, error)
 	Prepare(query string) (*sql.Stmt, error)
