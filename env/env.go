@@ -6,8 +6,9 @@ import (
 )
 
 var (
-	CoreDB = getEnvOrPanic("CORE_DB")
-	Port   = getEnv("PORT", "8000")
+	CoreDB    = getEnvOrPanic("CORE_DB")
+	OpenAIKey = getEnvOrPanic("OPENAI_KEY")
+	Port      = getEnv("PORT", "8000")
 )
 
 func getEnv(key string, fallback string) string {

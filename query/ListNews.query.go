@@ -62,6 +62,7 @@ func ListNews(dbc db.Queryable, req ListNewsRequest) ([]structs.News, error) {
 	).
 		From("website.news n").
 		GroupBy("n.id", "s.id", "snt.id", "snt_status.id").
+		OrderBy("n.posted_at DESC").
 		LeftJoin("website.outlets s ON s.id = n.article_source").
 		LeftJoin("website.sentiment snt ON snt.news_id = n.id").
 		LeftJoin("website.company_associations ca ON ca.news_id = n.id").

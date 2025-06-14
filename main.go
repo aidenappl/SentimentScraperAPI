@@ -59,7 +59,7 @@ func main() {
 	// Background Handlers
 	go func() {
 		for {
-			log.Println("📰 Fetching Google RSS feeds...")
+			log.Println("📰 Fetching feeds...")
 			state.HydrateNewsCache()
 			background.NewsFilter()
 			time.Sleep(1 * time.Minute)
