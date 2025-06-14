@@ -27,7 +27,6 @@ func GenerateVaderSentiment(text string) (*map[string]float64, error) {
 	}
 
 	score := sia.PolarityScores(text)
-	fmt.Println(score)
 	if score == nil {
 		return nil, fmt.Errorf("failed to generate sentiment score")
 	}

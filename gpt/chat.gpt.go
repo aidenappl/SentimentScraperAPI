@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 
 	"github.com/aidenappl/SentimentScraperAPI/env"
@@ -63,7 +64,8 @@ func FetchSentimentFromChatGPT(article structs.News) (*structs.Sentiment, error)
 		} `json:"choices"`
 	}
 	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, fmt.Errorf("failed to parse OpenAI response: %w", err)
+		log.Println("Failed to parse OpenAI response, retrying!:", err)
+		return FetchSentimentFromChatGPT(article) // Retry in case of transient error
 	}
 
 	if len(raw.Choices) == 0 {
@@ -73,7 +75,8 @@ func FetchSentimentFromChatGPT(article structs.News) (*structs.Sentiment, error)
 	// Unmarshal the response content into Sentiment struct
 	var sentiment structs.Sentiment
 	if err := json.Unmarshal([]byte(raw.Choices[0].Message.Content), &sentiment); err != nil {
-		return nil, fmt.Errorf("failed to parse sentiment JSON: %w\nRaw: %s", err, raw.Choices[0].Message.Content)
+		log.Println("Failed to parse sentiment response, retrying!:", err)
+		return FetchSentimentFromChatGPT(article) // Retry in case of parsing error
 	}
 
 	return &sentiment, nil

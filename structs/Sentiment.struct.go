@@ -16,11 +16,12 @@ type Sentiment struct {
 	Language         *string     `json:"language"`          // Language of the sentiment analysis
 	Source           *string     `json:"source"`
 	ProcessedAt      *time.Time  `json:"processed_at"`
-	InsertedAt       *time.Time  `json:"inserted_at"`     // Timestamp when the sentiment was inserted
-	Status           *GeneralNSN `json:"status"`          // Status of the sentiment analysis (e.g., pending, completed, failed)
-	VaderComp        *float64    `json:"vader_comp"`      // VADER compound score
-	VaderPos         *float64    `json:"vader_pos"`       // VADER positive score
-	VaderNeg         *float64    `json:"vader_neg"`       // VADER negative score
-	VaderNeu         *float64    `json:"vader_neu"`       // VADER neutral score
-	MultitextClass   *uint8      `json:"multitext_class"` // Multiclass classification score
+	InsertedAt       *time.Time  `json:"inserted_at"`         // Timestamp when the sentiment was inserted
+	Status           *GeneralNSN `json:"status"`              // Status of the sentiment analysis (e.g., pending, completed, failed)
+	StatusID         *int        `json:"status_id,omitempty"` // ID of the status in the GeneralNSN table
+	VaderComp        *float64    `json:"vader_comp"`          // VADER compound score
+	VaderPos         *float64    `json:"vader_pos"`           // VADER positive score
+	VaderNeg         *float64    `json:"vader_neg"`           // VADER negative score
+	VaderNeu         *float64    `json:"vader_neu"`           // VADER neutral score
+	MultitextClass   *uint8      `json:"multitext_class"`     // Multiclass classification score
 }

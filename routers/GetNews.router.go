@@ -1,15 +1,16 @@
 package routers
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
 
 	"github.com/aidenappl/SentimentScraperAPI/db"
-	"github.com/aidenappl/SentimentScraperAPI/gpt"
 	"github.com/aidenappl/SentimentScraperAPI/query"
 	"github.com/aidenappl/SentimentScraperAPI/responder"
 	"github.com/aidenappl/SentimentScraperAPI/sentiment"
+	"github.com/aidenappl/SentimentScraperAPI/tools"
 	"github.com/gorilla/mux"
 )
 
@@ -41,45 +42,19 @@ func GetNews(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	gptSentiment, err := gpt.FetchSentimentFromChatGPT(*news)
-	if err != nil {
-		log.Println("❌ Failed to fetch sentiment from ChatGPT:", err)
-	}
+	if news.Sentiment == nil {
+		if news, err = query.CreateEmptySentiment(db.DB, *news.ID); err != nil {
+			log.Println("❌ Failed to create empty sentiment:", err)
+			responder.SendError(w, http.StatusInternalServerError, "Failed to create empty sentiment", err)
+			return
+		}
 
-	senti, err := sentiment.GenerateSentiment(*news.SummaryText)
-	if err != nil {
-		log.Println("❌ Failed to generate sentiment:", err)
-	}
-
-	vsenti, err := sentiment.GenerateVaderSentiment(*news.SummaryText)
-	if err != nil {
-		log.Println("❌ Failed to generate VADER sentiment:", err)
-	}
-
-	if gptSentiment == nil {
-		log.Println("❌ GPT sentiment analysis returned nil")
+		sentiment.QueueSentimentProcessing(news)
 	} else {
-		news.Sentiment = gptSentiment
-	}
-
-	if vsenti == nil {
-		log.Println("❌ VADER sentiment analysis returned nil")
-	} else {
-		comp := (*vsenti)["compound"]
-		pos := (*vsenti)["pos"]
-		neg := (*vsenti)["neg"]
-		neu := (*vsenti)["neu"]
-
-		news.Sentiment.VaderPos = &pos
-		news.Sentiment.VaderNeg = &neg
-		news.Sentiment.VaderNeu = &neu
-		news.Sentiment.VaderComp = &comp
-	}
-
-	if senti == nil {
-		log.Println("❌ Sentiment analysis returned nil")
-	} else {
-		news.Sentiment.MultitextClass = senti
+		fmt.Println(news.Sentiment.Status.ID)
+		if news.Sentiment.Status.ID != tools.IntP(4) {
+			sentiment.QueueSentimentProcessing(news)
+		}
 	}
 
 	responder.New(w, news)

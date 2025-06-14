@@ -1,11 +1,13 @@
 package routers
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/aidenappl/SentimentScraperAPI/db"
 	"github.com/aidenappl/SentimentScraperAPI/query"
 	"github.com/aidenappl/SentimentScraperAPI/responder"
+	"github.com/aidenappl/SentimentScraperAPI/sentiment"
 	"github.com/aidenappl/SentimentScraperAPI/structs"
 	"github.com/aidenappl/SentimentScraperAPI/tools"
 )
@@ -33,5 +35,25 @@ func ListNews(w http.ResponseWriter, r *http.Request) {
 		responder.SendErrorWithParams(w, "No news found", http.StatusNotFound, nil, nil)
 		return
 	}
+
 	responder.New(w, news)
+
+	go processSentimentQueue(&news)
+}
+
+func processSentimentQueue(newsList *[]structs.News) {
+	for _, n := range *newsList {
+		if n.Sentiment == nil {
+			newsRet, err := query.CreateEmptySentiment(db.DB, *n.ID)
+			if err != nil {
+				log.Println("❌ Failed to create empty sentiment:", err)
+				continue
+			}
+			sentiment.QueueSentimentProcessing(newsRet)
+		} else {
+			if *n.Sentiment.Status.ID != 4 {
+				sentiment.QueueSentimentProcessing(&n)
+			}
+		}
+	}
 }

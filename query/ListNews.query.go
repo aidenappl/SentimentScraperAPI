@@ -158,8 +158,10 @@ func ListNews(dbc db.Queryable, req ListNewsRequest) ([]structs.News, error) {
 		}
 		newsItems = append(newsItems, newsItem)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating rows: %w", err)
 	}
+
 	return newsItems, nil
 }

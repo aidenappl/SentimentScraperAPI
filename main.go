@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"github.com/aidenappl/SentimentScraperAPI/env"
 	"github.com/aidenappl/SentimentScraperAPI/middleware"
 	"github.com/aidenappl/SentimentScraperAPI/routers"
+	"github.com/aidenappl/SentimentScraperAPI/sentiment"
 	"github.com/aidenappl/SentimentScraperAPI/state"
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
@@ -21,6 +23,11 @@ func main() {
 	if err := db.PingDB(); err != nil {
 		log.Fatalf("❌ Failed to connect to the database: %v", err)
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go sentiment.StartSentimentWorker(ctx)
 
 	// Hydrate News Cache
 	err := state.HydrateNewsCache()
