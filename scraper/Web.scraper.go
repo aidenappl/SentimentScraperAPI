@@ -34,7 +34,11 @@ func Scrape(url string) *ScrapedArticle {
 
 		c.OnHTML("body", func(e *colly.HTMLElement) {
 			article.Title = e.ChildText("h1.ArticleHeader-headline")
-			article.AuthorName = e.ChildText("a.Author-authorName")
+			article.AuthorName = e.ChildText("a.Author-authorName, span.Author-authorInfo")
+
+			if len(article.AuthorName) == 0 {
+				article.AuthorName = "CNBC"
+			}
 
 			e.ForEach("div.group p", func(_ int, el *colly.HTMLElement) {
 				text := strings.TrimSpace(el.Text)
@@ -58,6 +62,10 @@ func Scrape(url string) *ScrapedArticle {
 					authors = append(authors, name)
 				}
 			})
+
+			if len(authors) == 0 {
+				authors = append(authors, "CNBC")
+			}
 
 			var paragraphs []string
 			e.ForEach("div[data-testid^='paragraph-']", func(_ int, el *colly.HTMLElement) {
