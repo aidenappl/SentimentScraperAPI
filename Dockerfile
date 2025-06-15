@@ -20,13 +20,15 @@ RUN go build -ldflags="-w -s" -o /bin/app
 # Stage 2: Minimal runtime container
 FROM alpine:latest
 
-# Copy only the compiled binary
-COPY --from=builder /bin/app /app
+# Create a working directory
+WORKDIR /app
 
-# Set a default port environment variable
-ENV PORT=8080
-ENV ROOTED_DB=""
-EXPOSE 8080
+# Copy the binary
+COPY --from=builder /bin/app .
+
+# Copy the VADER lexicon files (adjust paths if needed)
+COPY --from=builder /app/vader_lexicon.txt .
+COPY --from=builder /app/emoji_utf8_lexicon.txt .
 
 # Run the app
-ENTRYPOINT ["/app"]
+ENTRYPOINT ["./app"]
