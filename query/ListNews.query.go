@@ -168,7 +168,7 @@ func ListNews(dbc db.Queryable, req ListNewsRequest) ([]structs.News, error) {
 		} else {
 			newsItem.Sentiment = nil
 		}
-		if companies != "" {
+		if companies != "" && companies != "{NULL}" {
 			// Split the companies string into a slice
 			companies = strings.TrimSpace(companies)
 			// Remove surrounding brackets or quotes if present
