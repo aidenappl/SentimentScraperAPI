@@ -59,6 +59,11 @@ func ListNews(dbc db.Queryable, req ListNewsRequest) ([]structs.News, error) {
 		"snt.source",
 		"snt.processed_at",
 		"snt.inserted_at",
+		"snt.vader_comp",
+		"snt.vader_pos",
+		"snt.vader_neg",
+		"snt.vader_neu",
+		"snt.multitext_classification",
 
 		"snt_status.id",
 		"snt_status.name",
@@ -143,6 +148,11 @@ func ListNews(dbc db.Queryable, req ListNewsRequest) ([]structs.News, error) {
 			&sentiment.Source,
 			&sentiment.ProcessedAt,
 			&sentiment.InsertedAt,
+			&sentiment.VaderComp,
+			&sentiment.VaderPos,
+			&sentiment.VaderNeg,
+			&sentiment.VaderNeu,
+			&sentiment.MultitextClass,
 
 			&sentimentStatus.ID,
 			&sentimentStatus.Name,
