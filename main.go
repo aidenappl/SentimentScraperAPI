@@ -79,6 +79,7 @@ func main() {
 	corsMiddleware := cors.New(cors.Options{
 		AllowedOrigins: []string{
 			"http://localhost:3000",
+			"http://localhost:8001",
 			"https://sentimentscraper.com",
 		},
 		AllowCredentials: true,
