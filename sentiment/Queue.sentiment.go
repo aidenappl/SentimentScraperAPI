@@ -12,7 +12,7 @@ import (
 	"github.com/aidenappl/SentimentScraperAPI/tools"
 )
 
-var NewsQueue = make(chan *structs.News, 100) // buffered queue
+var NewsQueue = make(chan *structs.News, 1000) // buffered queue
 
 func QueueSentimentProcessing(news *structs.News) {
 	if news == nil || news.ID == nil {
