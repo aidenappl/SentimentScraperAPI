@@ -1,6 +1,7 @@
 package query
 
 import (
+	"database/sql"
 	"fmt"
 	"strings"
 
@@ -22,7 +23,22 @@ type ListNewsRequest struct {
 
 func ListNews(dbc db.Queryable, req ListNewsRequest) ([]structs.News, error) {
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
+	// Build subquery for companies
+	companiesSubquery := `
+    SELECT ca.news_id, array_agg(c.ticker) AS companies
+    FROM website.company_associations ca
+    LEFT JOIN website.companies c ON c.id = ca.company_id
+    GROUP BY ca.news_id
+`
+
+	sentimentSubquery := `
+    SELECT DISTINCT ON (news_id) *
+    FROM website.sentiment
+    ORDER BY news_id, processed_at DESC
+`
+
 	q := psql.Select(
+		// --- News fields ---
 		"n.id",
 		"n.title",
 		"n.summary_text",
@@ -34,17 +50,17 @@ func ListNews(dbc db.Queryable, req ListNewsRequest) ([]structs.News, error) {
 		"n.body_content",
 		"n.authors",
 
-		// Article Source Join
+		// --- Article Source ---
 		"s.id",
 		"s.name",
 		"s.website",
 		"s.logo",
 		"s.inserted_at",
 
-		// Companies Arr
-		"array_agg(c.ticker) AS companies",
+		// --- Companies ---
+		"co.companies",
 
-		// Sentiment
+		// --- Sentiment ---
 		"snt.id",
 		"snt.news_id",
 		"snt.sentiment_summary",
@@ -65,18 +81,17 @@ func ListNews(dbc db.Queryable, req ListNewsRequest) ([]structs.News, error) {
 		"snt.vader_neu",
 		"snt.multitext_classification",
 
+		// --- Sentiment Status ---
 		"snt_status.id",
 		"snt_status.name",
 		"snt_status.short_name",
 	).
 		From("website.news n").
-		GroupBy("n.id", "s.id", "snt.id", "snt_status.id").
-		OrderBy("n.posted_at DESC").
 		LeftJoin("website.outlets s ON s.id = n.article_source").
-		LeftJoin("website.sentiment snt ON snt.news_id = n.id").
-		LeftJoin("website.company_associations ca ON ca.news_id = n.id").
+		LeftJoin(fmt.Sprintf("(%s) snt ON snt.news_id = n.id", sentimentSubquery)).
 		LeftJoin("website.sentiment_statuses snt_status ON snt.status = snt_status.id").
-		LeftJoin("website.companies c ON c.id = ca.company_id")
+		LeftJoin(fmt.Sprintf("(%s) co ON co.news_id = n.id", companiesSubquery)).
+		OrderBy("n.posted_at DESC")
 
 	if req.Limit != nil {
 		q = q.Limit(uint64(*req.Limit))
@@ -111,7 +126,7 @@ func ListNews(dbc db.Queryable, req ListNewsRequest) ([]structs.News, error) {
 	for rows.Next() {
 		var newsItem structs.News
 		var articleSource structs.Outlet
-		var companies string
+		var companies sql.NullString
 		var sentiment structs.Sentiment
 		var sentimentStatus structs.GeneralNSN
 		err := rows.Scan(
@@ -168,12 +183,10 @@ func ListNews(dbc db.Queryable, req ListNewsRequest) ([]structs.News, error) {
 		} else {
 			newsItem.Sentiment = nil
 		}
-		if companies != "" && companies != "{NULL}" {
-			// Split the companies string into a slice
-			companies = strings.TrimSpace(companies)
-			// Remove surrounding brackets or quotes if present
-			companies = strings.Trim(companies, "{}")
-			tickers := strings.Split(companies, ",")
+		if companies.Valid && companies.String != "" && companies.String != "{NULL}" {
+			str := strings.TrimSpace(companies.String)
+			str = strings.Trim(str, "{}")
+			tickers := strings.Split(str, ",")
 			newsItem.Tickers = &tickers
 		}
 		newsItems = append(newsItems, newsItem)
