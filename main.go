@@ -87,6 +87,9 @@ func main() {
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 	})
 
+	// Start Healcheck Polling
+	go background.StartHealthCheckPolling(ctx)
+
 	log.Printf("✅ SentimentScraper API running on port %s\n", env.Port)
 	log.Fatal(http.ListenAndServe(":"+env.Port, corsMiddleware.Handler(r)))
 }
