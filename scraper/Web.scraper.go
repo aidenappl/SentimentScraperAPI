@@ -64,7 +64,7 @@ func Scrape(url string) *ScrapedArticle {
 			})
 
 			if len(authors) == 0 {
-				authors = append(authors, "CNBC")
+				authors = append(authors, "Reuters")
 			}
 
 			var paragraphs []string

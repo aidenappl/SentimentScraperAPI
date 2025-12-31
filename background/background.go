@@ -36,9 +36,6 @@ func NewsFilter() {
 		}
 
 		scrapedArticle := scraper.Scrape(item.Article.URL)
-		if scrapedArticle != nil {
-
-		}
 		err = query.InsertNews(db.DB, item, query.InsertNewsRequest{
 			ArticleSourceID:  outlet.ID,
 			UniquePipelineID: item.ID,
