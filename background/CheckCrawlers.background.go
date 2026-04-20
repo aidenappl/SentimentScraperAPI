@@ -20,7 +20,7 @@ func CheckCrawlers() {
 		return
 	}
 	if len(news) == 0 {
-		log.Println("No news found that needs crawling")
+		log.Println("No news items found that require crawling")
 		return
 	}
 	for _, item := range news {
