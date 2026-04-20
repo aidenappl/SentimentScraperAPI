@@ -2,6 +2,7 @@ package background
 
 import (
 	"log"
+	"strings"
 
 	"github.com/aidenappl/SentimentScraperAPI/db"
 	"github.com/aidenappl/SentimentScraperAPI/query"
@@ -24,6 +25,11 @@ func CheckCrawlers() {
 		return
 	}
 	for _, item := range news {
+		// skip reuters articles silently
+		if strings.Contains(*item.ArticleURL, "reuters.com") {
+			continue
+		}
+
 		log.Printf("📰 Found news item for crawling: %v\n", *item.ID)
 		article := scraper.Scrape(*item.ArticleURL)
 		if article == nil {
