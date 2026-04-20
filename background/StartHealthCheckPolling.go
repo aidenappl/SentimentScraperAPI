@@ -16,8 +16,6 @@ func StartHealthCheckPolling(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
-			log.Println("🔍 Pinging health check...")
-
 			// Create HTTP client with timeout
 			client := &http.Client{
 				Timeout: 10 * time.Second,
