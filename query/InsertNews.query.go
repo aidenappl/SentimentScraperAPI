@@ -26,8 +26,6 @@ func InsertNews(dbc db.Queryable, newsItem structs.NewsItem, newsMetadata Insert
 		return nil
 	}
 
-	log.Println("Inserting news item into database:", newsItem.Article.ID)
-
 	q := psql.Insert("website.news").
 		Columns(
 			"title",
@@ -65,7 +63,6 @@ func InsertNews(dbc db.Queryable, newsItem structs.NewsItem, newsMetadata Insert
 
 	// Cache the news item
 	state.AddToNewsCache(newsItem.Article.URL, newsItem.Article.ID)
-	log.Println("Inserted news item into database and cached:", newsItem.Article.ID)
 
 	// Add Company Associations
 	if len(newsItem.Article.Symbols) > 0 {

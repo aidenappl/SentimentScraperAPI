@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/aidenappl/SentimentScraperAPI/db"
-	"github.com/aidenappl/SentimentScraperAPI/gpt"
 	"github.com/aidenappl/SentimentScraperAPI/query"
 	"github.com/aidenappl/SentimentScraperAPI/structs"
 	"github.com/aidenappl/SentimentScraperAPI/tools"
@@ -46,12 +45,6 @@ func processNewsSentiment(news *structs.News) {
 		return
 	}
 
-	gptSentiment, err := gpt.FetchSentimentFromChatGPT(*news)
-	if err != nil {
-		log.Println("❌ Failed to fetch sentiment from ChatGPT:", err)
-		return
-	}
-
 	senti, err := GenerateSentiment(*news.BodyContent)
 	if err != nil {
 		log.Println("❌ Failed to generate sentiment:", err)
@@ -62,22 +55,6 @@ func processNewsSentiment(news *structs.News) {
 	if err != nil {
 		log.Println("❌ Failed to generate VADER sentiment:", err)
 		return
-	}
-
-	if gptSentiment == nil {
-		log.Println("❌ GPT sentiment analysis returned nil")
-		return
-	} else {
-		news.Sentiment.SentimentSummary = gptSentiment.SentimentSummary
-		news.Sentiment.Score = gptSentiment.Score
-		news.Sentiment.Positive = gptSentiment.Positive
-		news.Sentiment.Negative = gptSentiment.Negative
-		news.Sentiment.Neutral = gptSentiment.Neutral
-		news.Sentiment.Confidence = gptSentiment.Confidence
-		news.Sentiment.Polarity = gptSentiment.Polarity
-		news.Sentiment.Subjectivity = gptSentiment.Subjectivity
-		news.Sentiment.Language = gptSentiment.Language
-		news.Sentiment.Source = gptSentiment.Source
 	}
 
 	if vsenti != nil {

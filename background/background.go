@@ -2,6 +2,7 @@ package background
 
 import (
 	"log"
+	"strings"
 
 	"github.com/aidenappl/SentimentScraperAPI/db"
 	"github.com/aidenappl/SentimentScraperAPI/query"
@@ -24,6 +25,11 @@ func NewsFilter() {
 	}
 
 	for _, item := range news {
+		// skip reuters articles silently
+		if strings.Contains(item.Article.URL, "reuters.com") {
+			continue
+		}
+
 		// check if news item already exists
 		if _, exists := state.GetFromNewsCache(item.Article.URL); exists {
 			continue
