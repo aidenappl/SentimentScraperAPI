@@ -39,7 +39,6 @@ func NewsCompanyAssociation(db db.Queryable, req NewsCompanyAssociationRequest) 
 	if err != nil {
 		return fmt.Errorf("error executing SQL query: %w", err)
 	}
-	fmt.Println("Inserted news-company association for News ID:", req.NewsID, "and Company ID:", company.ID)
 	return nil
 
 }

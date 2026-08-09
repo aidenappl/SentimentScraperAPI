@@ -4,6 +4,7 @@ go 1.23.4
 
 require (
 	github.com/Masterminds/squirrel v1.5.4
+	github.com/PuerkitoBio/goquery v1.10.3
 	github.com/cdipaolo/sentiment v0.0.0-20200617002423-c697f64e7f10
 	github.com/drankou/go-vader v0.0.0-20200914131425-df6b682b7d41
 	github.com/gocolly/colly v1.2.0
@@ -14,7 +15,6 @@ require (
 )
 
 require (
-	github.com/PuerkitoBio/goquery v1.10.3 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/antchfx/htmlquery v1.3.4 // indirect
 	github.com/antchfx/xmlquery v1.4.4 // indirect

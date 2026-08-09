@@ -4,11 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/aidenappl/SentimentScraperAPI/db"
+	"github.com/aidenappl/SentimentScraperAPI/responder"
 )
 
 type SECCompany struct {
@@ -22,7 +23,11 @@ type SECCompanies map[string]SECCompany
 func HydrateTickers(w http.ResponseWriter, r *http.Request) {
 	companies, err := fetchSECJSON()
 	if err != nil {
-		log.Fatalf("❌ Failed to fetch/parse SEC data: %v", err)
+		// This used to be log.Fatalf, which killed the whole service whenever
+		// the SEC returned something unexpected.
+		slog.Error("failed to fetch SEC ticker data", "reason", "upstream", "err", err)
+		responder.SendError(w, http.StatusBadGateway, "failed to fetch SEC ticker data", err)
+		return
 	}
 
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
@@ -39,11 +44,11 @@ func HydrateTickers(w http.ResponseWriter, r *http.Request) {
 			Values(c.Title, c.Ticker, c.CIK).
 			ToSql()
 		if err != nil {
-			log.Printf("❌ Failed to build SQL query for %s (%s): %v", c.Title, c.Ticker, err)
+			slog.Debug("failed to build ticker insert", "ticker", c.Ticker, "err", err)
 			continue
 		}
 		if _, err := db.Exec(query, args...); err != nil {
-			log.Printf("❌ Failed to insert %s (%s): %v", c.Title, c.Ticker, err)
+			slog.Debug("failed to insert ticker", "ticker", c.Ticker, "err", err)
 		}
 	}
 	w.WriteHeader(http.StatusOK)

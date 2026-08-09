@@ -2,13 +2,19 @@ package main
 
 import (
 	"context"
-	"log"
+	"errors"
+	"log/slog"
 	"net/http"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/aidenappl/SentimentScraperAPI/background"
 	"github.com/aidenappl/SentimentScraperAPI/db"
 	"github.com/aidenappl/SentimentScraperAPI/env"
+	"github.com/aidenappl/SentimentScraperAPI/logging"
 	"github.com/aidenappl/SentimentScraperAPI/middleware"
 	"github.com/aidenappl/SentimentScraperAPI/routers"
 	"github.com/aidenappl/SentimentScraperAPI/sentiment"
@@ -18,25 +24,35 @@ import (
 )
 
 func main() {
+	logging.Init(env.LogLevel, env.LogSummaryInterval)
+
 	// Ping DB
 	if err := db.PingDB(); err != nil {
-		log.Fatalf("❌ Failed to connect to the database: %v", err)
-	} else {
-		log.Println("✅ Connected to the database successfully")
+		logging.Fatal("failed to connect to the database", "err", err)
 	}
+	slog.Info("connected to the database")
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	// SIGTERM is what Docker sends on stop, and it arrives roughly ten seconds
+	// before SIGKILL — everything below the cancel must finish inside that.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	var wg sync.WaitGroup
 
 	go sentiment.StartSentimentWorker(ctx)
 
+	// Emit one crawl summary per interval, plus a final line on shutdown.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		logging.Crawl.Run(ctx, env.LogSummaryInterval)
+	}()
+
 	// Hydrate News Cache
-	err := state.HydrateNewsCache()
-	if err != nil {
-		log.Fatalf("❌ Failed to hydrate news cache: %v", err)
-	} else {
-		log.Println("✅ News cache hydrated successfully")
+	if err := state.HydrateNewsCache(); err != nil {
+		logging.Fatal("failed to hydrate news cache", "err", err)
 	}
+	slog.Info("news cache hydrated")
 
 	r := mux.NewRouter()
 
@@ -65,14 +81,10 @@ func main() {
 	core.HandleFunc("/news/{id}", routers.GetNews).Methods(http.MethodGet)
 
 	// Background Handlers
+	wg.Add(1)
 	go func() {
-		for {
-			log.Println("📰 Fetching feeds...")
-			state.HydrateNewsCache()
-			background.NewsFilter()
-			background.CheckCrawlers()
-			time.Sleep(1 * time.Minute)
-		}
+		defer wg.Done()
+		runCrawlLoop(ctx)
 	}()
 
 	// CORS Middleware
@@ -87,9 +99,73 @@ func main() {
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 	})
 
-	// Start Healcheck Polling
+	// Start Healthcheck Polling
 	go background.StartHealthCheckPolling(ctx)
 
-	log.Printf("✅ SentimentScraper API running on port %s\n", env.Port)
-	log.Fatal(http.ListenAndServe(":"+env.Port, corsMiddleware.Handler(r)))
+	server := &http.Server{
+		Addr:         ":" + env.Port,
+		Handler:      corsMiddleware.Handler(r),
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 60 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+
+	go func() {
+		slog.Info("SentimentScraper API listening",
+			"port", env.Port,
+			"log_level", env.LogLevel,
+			"summary_interval", env.LogSummaryInterval.String(),
+		)
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logging.Fatal("http server failed", "err", err)
+		}
+	}()
+
+	<-ctx.Done()
+	stop()
+	slog.Info("shutdown signal received, draining")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		slog.Error("http server shutdown failed", "err", err)
+	}
+
+	// Wait for the crawl loop and the summary emitter: without this the
+	// process exits before the final summary line is written, losing exactly
+	// the interval that explains why the service stopped.
+	wg.Wait()
+	slog.Info("shutdown complete")
+}
+
+// runCrawlLoop polls the feed and crawls outstanding articles until ctx is
+// cancelled. It uses a ticker rather than sleeping at the end of the body, so
+// a slow cycle does not push every later cycle further out of step.
+func runCrawlLoop(ctx context.Context) {
+	cycle := func() {
+		slog.Debug("fetching feeds")
+
+		if err := state.HydrateNewsCache(); err != nil {
+			slog.Error("failed to hydrate news cache", "reason", "query", "err", err)
+			return
+		}
+
+		background.NewsFilter()
+		background.CheckCrawlers()
+	}
+
+	cycle()
+
+	t := time.NewTicker(env.CrawlInterval)
+	defer t.Stop()
+
+	for {
+		select {
+		case <-t.C:
+			cycle()
+		case <-ctx.Done():
+			return
+		}
+	}
 }
