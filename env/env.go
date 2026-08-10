@@ -38,6 +38,11 @@ var (
 
 	// CrawlRetryBackoffMax caps that delay.
 	CrawlRetryBackoffMax = getEnvDuration("CRAWL_RETRY_BACKOFF_MAX", 6*time.Hour, time.Second)
+
+	// CrawlBlockedDomains is a comma-separated list of outlets that are
+	// ingested but never crawled. Empty means "use the built-in list"; set it
+	// to "none" to disable blocking entirely.
+	CrawlBlockedDomains = getEnv("CRAWL_BLOCKED_DOMAINS", "")
 )
 
 func getEnv(key string, fallback string) string {

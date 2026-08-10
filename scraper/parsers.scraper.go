@@ -50,10 +50,6 @@ func parseCNBC(e *colly.HTMLElement, article *ScrapedArticle) {
 		}
 	})
 	article.ArticleBody = strings.Join(paragraphs, "\n\n")
-
-	if article.AuthorName == "" {
-		article.AuthorName = "CNBC"
-	}
 }
 
 func parseReuters(e *colly.HTMLElement, article *ScrapedArticle) {
@@ -80,9 +76,6 @@ func parseReuters(e *colly.HTMLElement, article *ScrapedArticle) {
 
 	article.ArticleBody = strings.Join(paragraphs, "\n\n")
 	article.AuthorName = strings.Join(authors, ", ")
-	if article.AuthorName == "" {
-		article.AuthorName = "Reuters"
-	}
 }
 
 func parseTechCrunch(e *colly.HTMLElement, article *ScrapedArticle) {
@@ -96,10 +89,6 @@ func parseTechCrunch(e *colly.HTMLElement, article *ScrapedArticle) {
 		}
 	})
 	article.ArticleBody = strings.Join(paragraphs, "\n\n")
-
-	if article.AuthorName == "" {
-		article.AuthorName = "TechCrunch"
-	}
 }
 
 // bodyCandidates are containers that hold article text on a typical news page,
@@ -127,11 +116,23 @@ var boilerplateAncestors = []string{
 // schema.org JSON-LD, which most publishers emit and which needs no
 // per-site selectors, and falls back to picking the densest block of
 // paragraph text on the page.
+//
+// It only fills fields that are still empty, so it doubles as a gap-filler
+// behind a named parser: the named parser wins on what it extracted, and
+// anything it missed still gets populated. Named parsers therefore must not
+// substitute placeholder values — a hardcoded "TechCrunch" author would look
+// filled and suppress the real byline this finds.
 func parseGeneric(e *colly.HTMLElement, article *ScrapedArticle) {
 	if ld := parseJSONLD(e); ld != nil {
-		article.Title = ld.headline
-		article.AuthorName = ld.author
-		article.ArticleBody = ld.body
+		if article.Title == "" {
+			article.Title = ld.headline
+		}
+		if article.AuthorName == "" {
+			article.AuthorName = ld.author
+		}
+		if len(article.ArticleBody) < MinBodyLength {
+			article.ArticleBody = ld.body
+		}
 	}
 
 	if article.Title == "" {

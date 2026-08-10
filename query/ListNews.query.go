@@ -22,6 +22,10 @@ type ListNewsRequest struct {
 	// articles it can actually attempt rather than the same failing rows.
 	ExcludeIDs []int `json:"-"`
 
+	// ExcludeURLPatterns drops rows whose article_url matches any SQL LIKE
+	// pattern. The crawler uses it to keep blocked outlets out of the batch.
+	ExcludeURLPatterns []string `json:"-"`
+
 	// Selectors
 	ID *int `json:"id"`
 }
@@ -120,6 +124,10 @@ func ListNews(dbc db.Queryable, req ListNewsRequest) ([]structs.News, error) {
 
 	if len(req.ExcludeIDs) > 0 {
 		q = q.Where(sq.NotEq{"n.id": req.ExcludeIDs})
+	}
+
+	for _, pattern := range req.ExcludeURLPatterns {
+		q = q.Where(sq.NotLike{"n.article_url": pattern})
 	}
 
 	query, args, err := q.ToSql()

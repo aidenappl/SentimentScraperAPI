@@ -175,6 +175,41 @@ func TestScrapeGenericParagraphFallback(t *testing.T) {
 	}
 }
 
+// Regression guard: a named parser used to hardcode its outlet as the author
+// when its byline selector missed, which suppressed the real byline the
+// generic extractor could find. TechCrunch articles were attributed to
+// "TechCrunch" rather than their actual writer.
+func TestNamedParserGapsAreFilledByGeneric(t *testing.T) {
+	body := longBody("The story body from the outlet's own markup.")
+	html := `<html><head><meta name="author" content="Anthony Ha"></head><body>
+	<div class="entry-content"><p>` + body + `</p></div>
+	</body></html>`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(html))
+	}))
+	defer srv.Close()
+
+	// Route this host through the TechCrunch parser, which extracts the body
+	// from .entry-content but has no matching byline selector here.
+	saved := domainParsers
+	domainParsers = map[string]parser{"127.0.0.1": parseTechCrunch}
+	defer func() { domainParsers = saved }()
+
+	article, err := Scrape(srv.URL)
+	if err != nil {
+		t.Fatalf("Scrape returned an error: %v", err)
+	}
+
+	if !strings.Contains(article.ArticleBody, "story body from the outlet") {
+		t.Errorf("named parser's body was lost, got %q", article.ArticleBody)
+	}
+	if article.AuthorName != "Anthony Ha" {
+		t.Errorf("got author %q, want the real byline 'Anthony Ha' — a named parser must not mask it", article.AuthorName)
+	}
+}
+
 func TestScrapeShortBodyIsEmptyError(t *testing.T) {
 	// A consent wall: fetched fine, but there is no article here. It must not
 	// come back as a success, or it would be persisted as an empty body and

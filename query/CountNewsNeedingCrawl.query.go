@@ -7,16 +7,24 @@ import (
 	"github.com/aidenappl/SentimentScraperAPI/db"
 )
 
-// CountNewsNeedingCrawl returns how many articles still have no body content.
+// CountNewsNeedingCrawl returns how many articles still have no body content,
+// excluding any whose URL matches one of excludeURLPatterns.
 //
 // This is the true backlog. The crawl batch is capped, so counting the rows a
 // batch returned would just report the cap back and hide a growing queue.
-func CountNewsNeedingCrawl(dbc db.Queryable) (int, error) {
+// Blocked outlets are excluded because they can never be crawled — counting
+// them would hold the backlog permanently above zero and destroy its value as
+// a health signal.
+func CountNewsNeedingCrawl(dbc db.Queryable, excludeURLPatterns []string) (int, error) {
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	q := psql.Select("COUNT(*)").
 		From("website.news n").
 		Where(sq.Or{sq.Eq{"n.body_content": nil}, sq.Eq{"n.body_content": ""}})
+
+	for _, pattern := range excludeURLPatterns {
+		q = q.Where(sq.NotLike{"n.article_url": pattern})
+	}
 
 	query, args, err := q.ToSql()
 	if err != nil {

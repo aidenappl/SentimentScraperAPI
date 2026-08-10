@@ -15,7 +15,8 @@ a small read-only HTTP API.
 Article extraction is domain-aware: known outlets get purpose-built parsers,
 and everything else falls through to a generic extractor that reads schema.org
 JSON-LD or picks the densest block of paragraph text on the page — so no URL is
-ever left unparsed.
+ever left unparsed. Outlets behind hard paywalls are ingested for their
+headline and symbols but never crawled.
 
 ## Role in the Sentiment Scraper ecosystem
 
@@ -74,6 +75,7 @@ Tests need neither network nor database — the crawler tests run against local
 | `CRAWL_MAX_ATTEMPTS` | `5` | Consecutive failures before the retry delay stops doubling |
 | `CRAWL_RETRY_BACKOFF` | `15m` | First retry delay after a failure; doubles each time |
 | `CRAWL_RETRY_BACKOFF_MAX` | `6h` | Ceiling on that delay |
+| `CRAWL_BLOCKED_DOMAINS` | built-in list | Comma-separated outlets to ingest but never crawl; `none` disables blocking |
 
 ### Logging
 

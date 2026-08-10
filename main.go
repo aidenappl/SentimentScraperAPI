@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/aidenappl/SentimentScraperAPI/logging"
 	"github.com/aidenappl/SentimentScraperAPI/middleware"
 	"github.com/aidenappl/SentimentScraperAPI/routers"
+	"github.com/aidenappl/SentimentScraperAPI/scraper"
 	"github.com/aidenappl/SentimentScraperAPI/sentiment"
 	"github.com/aidenappl/SentimentScraperAPI/state"
 	"github.com/gorilla/mux"
@@ -25,6 +27,12 @@ import (
 
 func main() {
 	logging.Init(env.LogLevel, env.LogSummaryInterval)
+
+	if env.CrawlBlockedDomains == "none" {
+		scraper.SetBlockedDomains(nil)
+	} else if env.CrawlBlockedDomains != "" {
+		scraper.SetBlockedDomains(strings.Split(env.CrawlBlockedDomains, ","))
+	}
 
 	// Ping DB
 	if err := db.PingDB(); err != nil {

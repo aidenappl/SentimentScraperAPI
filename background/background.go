@@ -7,6 +7,7 @@ import (
 	"github.com/aidenappl/SentimentScraperAPI/query"
 	"github.com/aidenappl/SentimentScraperAPI/scraper"
 	"github.com/aidenappl/SentimentScraperAPI/state"
+	"github.com/aidenappl/SentimentScraperAPI/tools"
 )
 
 func Google() {
@@ -31,6 +32,10 @@ func NewsFilter() {
 	}
 
 	for _, item := range news {
+		// The feed occasionally appends stray characters to a URL; storing one
+		// verbatim turns a live article into a permanent 404.
+		item.Article.URL = tools.NormalizeURL(item.Article.URL)
+
 		// Check if the news item already exists.
 		if _, exists := state.GetFromNewsCache(item.Article.URL); exists {
 			continue
@@ -43,10 +48,14 @@ func NewsFilter() {
 		}
 
 		// A failed first scrape leaves body and author empty; the item still
-		// gets inserted so CheckCrawlers can pick it up.
+		// gets inserted so CheckCrawlers can pick it up. Blocked outlets are
+		// not attempted at all — they are ingested for their headline and
+		// symbols, and never crawled.
 		var body, authors string
-		if article, err := scraper.Scrape(item.Article.URL); err == nil {
-			body, authors = article.ArticleBody, article.AuthorName
+		if !scraper.IsBlocked(item.Article.URL) {
+			if article, err := scraper.Scrape(item.Article.URL); err == nil {
+				body, authors = article.ArticleBody, article.AuthorName
+			}
 		}
 
 		if err := query.InsertNews(db.DB, item, query.InsertNewsRequest{

@@ -3,6 +3,7 @@ package background
 import (
 	"errors"
 	"log/slog"
+	"net/url"
 	"time"
 
 	"github.com/aidenappl/SentimentScraperAPI/db"
@@ -34,8 +35,9 @@ func CheckCrawlers() {
 
 	now := time.Now()
 	deferred := retries.Deferred(now)
+	blocked := scraper.BlockedURLPatterns()
 
-	total, err := query.CountNewsNeedingCrawl(db.DB)
+	total, err := query.CountNewsNeedingCrawl(db.DB, blocked)
 	if err != nil {
 		slog.Error("failed to count crawl backlog", "reason", "query", "err", err)
 	} else {
@@ -44,9 +46,10 @@ func CheckCrawlers() {
 	logging.Crawl.SetDeferred(len(deferred))
 
 	news, err := query.ListNews(db.DB, query.ListNewsRequest{
-		HasBodyContent: tools.BoolP(false),
-		Limit:          tools.IntP(env.CrawlBatchLimit),
-		ExcludeIDs:     deferred,
+		HasBodyContent:     tools.BoolP(false),
+		Limit:              tools.IntP(env.CrawlBatchLimit),
+		ExcludeIDs:         deferred,
+		ExcludeURLPatterns: blocked,
 	})
 	if err != nil {
 		slog.Error("failed to list news items for crawling", "reason", "query", "err", err)
@@ -84,7 +87,17 @@ func CheckCrawlers() {
 			// request error.
 			if errors.Is(err, scraper.ErrEmptyBody) {
 				logging.Crawl.IncEmpty()
-				slog.Debug("no article body extracted", "news_id", id, "url", articleURL)
+
+				// Warn, not Debug: this is the one failure mode the fetch path
+				// cannot report, and it is deduplicated per domain, so it costs
+				// one line per outlet per window while making it obvious which
+				// outlets the extractor cannot handle.
+				slog.Warn("no article body extracted",
+					"reason", "empty",
+					"domain", domainOf(articleURL),
+					"news_id", id,
+					"url", articleURL,
+				)
 			}
 
 			continue
@@ -107,4 +120,15 @@ func CheckCrawlers() {
 		logging.Crawl.IncScraped()
 		slog.Debug("scraped news item", "news_id", id, "chars", len(article.ArticleBody))
 	}
+}
+
+// domainOf keeps the dedup key low-cardinality: one entry per outlet rather
+// than one per article.
+func domainOf(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+
+	return u.Hostname()
 }

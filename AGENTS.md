@@ -79,6 +79,7 @@ network or database.
 | `CRAWL_MAX_ATTEMPTS` | `5` | Consecutive failures before the retry delay stops doubling |
 | `CRAWL_RETRY_BACKOFF` | `15m` | First retry delay after a failure; doubles each time |
 | `CRAWL_RETRY_BACKOFF_MAX` | `6h` | Ceiling on that delay |
+| `CRAWL_BLOCKED_DOMAINS` | built-in list | Comma-separated outlets to ingest but never crawl; `none` disables blocking |
 
 Bad values fall back to the default rather than stopping the service — a typo
 in `LOG_LEVEL` must never prevent a boot.
@@ -115,6 +116,17 @@ known outlets and `parseGeneric` for everything else, so no URL is ever
 unhandled. Adding an outlet means adding to `domainParsers` — never adding a
 branch that leaves other domains unparsed.
 
+**Named parsers must not substitute placeholder values.** `parseGeneric` runs
+behind every named parser and fills only the fields still empty, so a missed
+byline is recovered from JSON-LD or meta tags. A hardcoded `"TechCrunch"`
+author looks filled, suppresses that recovery, and silently misattributes every
+article — which is exactly what happened before this rule existed.
+
+**Blocked outlets are ingested but never crawled.** Some outlets answer every
+request with 401 no matter what headers are sent. They are excluded from the
+crawl query and from the backlog count, so the backlog stays a meaningful
+health signal instead of resting permanently on an uncrawlable residue.
+
 ## 6. Domain & architecture
 
 Three goroutines run alongside the HTTP server, all cancelled by the same
@@ -149,10 +161,28 @@ Retry state is in memory, so a restart gives every article a fresh start —
 usually what you want, since a deploy is what fixes a bad parser.
 
 **Extraction.** `Scrape` builds a Colly collector rooted at `<html>` and
-dispatches to the parser for the host. `parseGeneric` prefers schema.org
+dispatches to the parser for the host, then runs `parseGeneric` behind it to
+fill any fields the named parser left empty. `parseGeneric` prefers schema.org
 JSON-LD (`articleBody`, `headline`, `author`), falling back to picking the
 densest block of `<p>` text while excluding nav, header, footer, aside and
 figure. A result under `MinBodyLength` is treated as no article at all.
+
+**Ingest hygiene.** Feed URLs are passed through `tools.NormalizeURL` before
+they are cached or stored: the feed intermittently appends stray characters
+(a trailing backtick arriving as `%60`, for instance), and storing one verbatim
+turns a live article into a permanent 404 no parser can rescue.
+
+To check extraction against real pages when adding a parser or chasing a
+persistent `items_empty` count, use the live-check tool — it is excluded from
+normal runs by a build tag:
+
+```bash
+printf '%s\n' "https://example.com/article" > /tmp/urls.txt
+URLS_FILE=/tmp/urls.txt go test ./scraper -tags livecheck -run TestLiveExtraction -v
+
+# What does the named parser add over the generic extractor?
+COMPARE_URL="https://example.com/article" go test ./scraper -tags livecheck -run TestLiveGenericComparison -v
+```
 
 **Auth:** none. The API is read-only and public.
 
@@ -193,7 +223,10 @@ health signal:
   crawler is wedged, not idle. This is the reason a summary is emitted even
   when every counter is zero.
 - `fail_forbidden` or `fail_http_401` concentrated on one domain means that
-  outlet is blocking us or is paywalled.
+  outlet is blocking us or is paywalled. If it is unfixable, add it to
+  `CRAWL_BLOCKED_DOMAINS` rather than letting it retry forever.
+- `no article body extracted` warnings are deduplicated per domain and name the
+  outlets the extractor cannot handle — the input to the next parser fix.
 
 To investigate a specific article, set `LOG_LEVEL=DEBUG` — every per-item line
 carries `news_id`.

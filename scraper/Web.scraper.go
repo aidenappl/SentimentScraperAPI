@@ -58,13 +58,13 @@ func Scrape(url string) (*ScrapedArticle, error) {
 		parse, named := parserFor(e.Request.URL.Hostname())
 		parse(e, article)
 
-		// A named parser that comes back empty means the outlet changed its
-		// markup; fall back to the generic extractor rather than losing the
-		// article entirely.
-		if !named || len(article.ArticleBody) >= MinBodyLength {
-			return
+		// Always run the generic extractor behind a named parser. It only
+		// fills fields left empty, so the named parser keeps what it got right
+		// while its gaps — a byline selector that has drifted, a body the
+		// outlet re-templated — are covered rather than lost.
+		if named {
+			parseGeneric(e, article)
 		}
-		parseGeneric(e, article)
 	})
 
 	c.OnRequest(func(r *colly.Request) {
