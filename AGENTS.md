@@ -38,6 +38,7 @@ logging/         slog setup, crawl summary counters, error dedup handler
 middleware/      Request logging
 query/           One file per query, squirrel-built
 responder/       Standard success/error JSON envelopes
+retry/           Exponential-backoff scheduler (no service dependencies)
 routers/         HTTP handlers
 scraper/         Feed client, Colly crawler, per-domain + generic parsers
 sentiment/       Sentiment worker and queue
@@ -75,7 +76,9 @@ network or database.
 | `LOG_SUMMARY_INTERVAL` | `5m` | Crawl summary cadence and error dedup window |
 | `CRAWL_INTERVAL` | `1m` | Time between crawl cycles |
 | `CRAWL_BATCH_LIMIT` | `50` | Max articles attempted per cycle |
-| `CRAWL_MAX_ATTEMPTS` | `3` | Failures before an article is skipped |
+| `CRAWL_MAX_ATTEMPTS` | `5` | Consecutive failures before the retry delay stops doubling |
+| `CRAWL_RETRY_BACKOFF` | `15m` | First retry delay after a failure; doubles each time |
+| `CRAWL_RETRY_BACKOFF_MAX` | `6h` | Ceiling on that delay |
 
 Bad values fall back to the default rather than stopping the service — a typo
 in `LOG_LEVEL` must never prevent a boot.
@@ -125,12 +128,25 @@ signal-derived context:
 3. **Summary emitter** (`logging.Crawl.Run`) — one summary line per interval,
    plus a final line on shutdown.
 
-**Crawl flow.** `CheckCrawlers` lists up to `CRAWL_BATCH_LIMIT` articles whose
-`body_content` is null or empty, and for each: skip if it has already failed
-`CRAWL_MAX_ATTEMPTS` times; otherwise `scraper.Scrape` it. Success writes the
-body and author back and clears the attempt count. Any failure increments it.
-Attempt tracking is in memory, so a restart gives every article a fresh set of
-attempts — usually what you want, since a deploy is what fixes a bad parser.
+**Crawl flow.** `CheckCrawlers` counts the true backlog, asks `retry` which
+articles are still in backoff, then lists up to `CRAWL_BATCH_LIMIT` articles
+whose `body_content` is null or empty **excluding those IDs**, and scrapes each.
+Success writes the body and author back and clears the article's retry history;
+failure schedules the next attempt.
+
+Two details here are load-bearing, and both were learned by getting them wrong:
+
+- **Backed-off articles are excluded in SQL, not filtered afterwards.** The
+  listing is ordered `posted_at DESC` and the batch is capped, so filtering
+  after the query returns the same failing rows every cycle and the crawler
+  never reaches the rest of the backlog.
+- **Failures back off; they are never abandoned.** Permanently skipping an
+  article after N failures ends with every article written off and the crawler
+  idle with a full backlog. Delays double from `CRAWL_RETRY_BACKOFF` up to
+  `CRAWL_RETRY_BACKOFF_MAX` and stay there.
+
+Retry state is in memory, so a restart gives every article a fresh start —
+usually what you want, since a deploy is what fixes a bad parser.
 
 **Extraction.** `Scrape` builds a Colly collector rooted at `<html>` and
 dispatches to the parser for the host. `parseGeneric` prefers schema.org
@@ -162,17 +178,22 @@ figure. A result under `MinBodyLength` is treated as no article at all.
 health signal:
 
 ```json
-{"msg":"crawl summary","kind":"interval","interval_s":300,"backlog":42,
- "items_found":40,"items_scraped":31,"items_empty":4,"items_skipped":2,
- "items_failed":5,"fail_forbidden":4,"fail_timeout":1}
+{"msg":"crawl summary","kind":"interval","interval_s":300,"backlog":1284,
+ "deferred":37,"items_found":40,"items_scraped":31,"items_empty":4,
+ "items_skipped":2,"items_failed":5,"fail_forbidden":4,"fail_timeout":1}
 ```
 
-- `backlog` climbing over hours means articles are not being drained.
-- `backlog` steady with `items_scraped: 0` means the crawler is wedged, not idle
-  — the reason a summary is emitted even when every counter is zero.
-- A large `items_skipped` means many articles have hit `CRAWL_MAX_ATTEMPTS`; a
-  restart retries them.
-- `fail_forbidden` concentrated on one domain means that outlet is blocking us.
+- `backlog` is the true count of articles awaiting a body, across the whole
+  table — not the size of the batch. Climbing over hours means articles are not
+  being drained.
+- `deferred` is how many of those are waiting out a retry backoff. `deferred`
+  approaching `backlog` with `items_found: 0` means everything in reach is
+  failing — check the `fail_*` breakdown for which outlet.
+- `items_found: 0` with a non-zero `backlog` and a small `deferred` means the
+  crawler is wedged, not idle. This is the reason a summary is emitted even
+  when every counter is zero.
+- `fail_forbidden` or `fail_http_401` concentrated on one domain means that
+  outlet is blocking us or is paywalled.
 
 To investigate a specific article, set `LOG_LEVEL=DEBUG` — every per-item line
 carries `news_id`.
@@ -184,6 +205,12 @@ carries `news_id`.
   attributes, or deduplication silently stops working.
 - **Do not add high-cardinality values to `reason` or `domain`.**
 - **Do not write an empty `body_content`.**
+- **Do not abandon work permanently.** Back it off and let it come round again.
+- **Do not report a capped batch length as a gauge.** Count the real thing, or
+  the metric silently reads back the cap you set.
+- **Do not add a package-level `env` var to a package you want to test.**
+  `env` panics at init without `CORE_DB`, so importing it makes the package
+  untestable — this is why `retry/` is standalone.
 - **Do not use `log.Fatal` outside startup.** `slog.SetLogLoggerLevel` routes
   stdlib `log` to Debug, so a `log.Fatal` would exit the process while printing
   nothing. Use `logging.Fatal`, and never from inside an HTTP handler.

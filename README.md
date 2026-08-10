@@ -71,7 +71,9 @@ Tests need neither network nor database — the crawler tests run against local
 | `LOG_SUMMARY_INTERVAL` | `5m` | Crawl summary cadence and error dedup window |
 | `CRAWL_INTERVAL` | `1m` | Time between crawl cycles |
 | `CRAWL_BATCH_LIMIT` | `50` | Max articles attempted per cycle |
-| `CRAWL_MAX_ATTEMPTS` | `3` | Failures before an article is skipped |
+| `CRAWL_MAX_ATTEMPTS` | `5` | Consecutive failures before the retry delay stops doubling |
+| `CRAWL_RETRY_BACKOFF` | `15m` | First retry delay after a failure; doubles each time |
+| `CRAWL_RETRY_BACKOFF_MAX` | `6h` | Ceiling on that delay |
 
 ### Logging
 
@@ -79,9 +81,14 @@ Output is structured JSON on stderr. The crawl loop does not log per article;
 it emits one summary line per `LOG_SUMMARY_INTERVAL`:
 
 ```json
-{"msg":"crawl summary","kind":"interval","interval_s":300,"backlog":42,
- "items_found":40,"items_scraped":31,"items_failed":5,"fail_forbidden":4}
+{"msg":"crawl summary","kind":"interval","interval_s":300,"backlog":1284,
+ "deferred":37,"items_found":40,"items_scraped":31,"items_failed":5,
+ "fail_forbidden":4}
 ```
+
+`backlog` is the true number of articles awaiting a body; `deferred` is how
+many of those are waiting out a retry backoff. Failed articles retry with
+exponential backoff rather than being abandoned.
 
 Errors are logged immediately and deduplicated by `(reason, domain)` within the
 interval, so one blocking outlet produces one line rather than thousands. Set
@@ -98,6 +105,7 @@ logging/       slog setup, crawl counters, error dedup
 middleware/    Request logging
 query/         Squirrel-built queries
 responder/     JSON response envelopes
+retry/         Exponential-backoff scheduler
 routers/       HTTP handlers
 scraper/       Feed client, crawler, domain + generic parsers
 sentiment/     Sentiment worker and queue

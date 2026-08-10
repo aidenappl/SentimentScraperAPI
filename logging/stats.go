@@ -25,9 +25,12 @@ type Stats struct {
 	empty   atomic.Int64
 	skipped atomic.Int64
 
-	// backlog is a gauge, not a counter: it is not reset on snapshot. It is
-	// what distinguishes an idle crawler from a wedged one.
-	backlog atomic.Int64
+	// backlog and deferred are gauges, not counters: they are not reset on
+	// snapshot. Together they distinguish an idle crawler from a wedged one —
+	// backlog is the true number of articles awaiting a body, deferred is how
+	// many of those are currently waiting out a retry backoff.
+	backlog  atomic.Int64
+	deferred atomic.Int64
 
 	mu       sync.Mutex
 	failures map[string]int64
@@ -42,8 +45,14 @@ func (s *Stats) IncScraped() { s.scraped.Add(1) }
 func (s *Stats) IncEmpty()   { s.empty.Add(1) }
 func (s *Stats) IncSkipped() { s.skipped.Add(1) }
 
-// SetBacklog records how many articles the current cycle found outstanding.
+// SetBacklog records the total number of articles still awaiting a body.
+// This is a count over the whole table, not the size of the current batch —
+// a batch is capped, so reporting its length would just echo the cap back and
+// hide a growing queue.
 func (s *Stats) SetBacklog(n int) { s.backlog.Store(int64(n)) }
+
+// SetDeferred records how many articles are waiting out a retry backoff.
+func (s *Stats) SetDeferred(n int) { s.deferred.Store(int64(n)) }
 
 // IncFailure records one failure under a reason. reason must come from a
 // closed set (see scraper.classifyError) — never a raw error string or a URL,
@@ -58,19 +67,20 @@ func (s *Stats) IncFailure(reason string) {
 // interval. The gap between the atomic swaps and the map swap means an event
 // landing mid-snapshot is counted in the next interval; totals are still
 // conserved, which is all a summary line needs.
-func (s *Stats) snapshot() (found, scraped, empty, skipped, backlog int64, failures map[string]int64) {
+func (s *Stats) snapshot() (found, scraped, empty, skipped, backlog, deferred int64, failures map[string]int64) {
 	found = s.found.Swap(0)
 	scraped = s.scraped.Swap(0)
 	empty = s.empty.Swap(0)
 	skipped = s.skipped.Swap(0)
 	backlog = s.backlog.Load()
+	deferred = s.deferred.Load()
 
 	s.mu.Lock()
 	failures = s.failures
 	s.failures = make(map[string]int64, len(failures))
 	s.mu.Unlock()
 
-	return found, scraped, empty, skipped, backlog, failures
+	return found, scraped, empty, skipped, backlog, deferred, failures
 }
 
 // Run emits a summary line every interval until ctx is cancelled, then emits
@@ -98,7 +108,7 @@ func (s *Stats) Run(ctx context.Context, interval time.Duration) {
 // missing line is ambiguous between "idle" and "dead", and the backlog gauge
 // is what tells those apart.
 func (s *Stats) emit(interval time.Duration, kind string) {
-	found, scraped, empty, skipped, backlog, failures := s.snapshot()
+	found, scraped, empty, skipped, backlog, deferred, failures := s.snapshot()
 
 	var failed int64
 	for _, n := range failures {
@@ -109,6 +119,7 @@ func (s *Stats) emit(interval time.Duration, kind string) {
 		"kind", kind,
 		"interval_s", int(interval.Seconds()),
 		"backlog", backlog,
+		"deferred", deferred,
 		"items_found", found,
 		"items_scraped", scraped,
 		"items_empty", empty,

@@ -26,10 +26,18 @@ var (
 	// CrawlBatchLimit caps how many outstanding articles one cycle attempts.
 	CrawlBatchLimit = getEnvInt("CRAWL_BATCH_LIMIT", 50)
 
-	// CrawlMaxAttempts is how many times an article may fail before it is
-	// skipped for the remainder of the process lifetime. Tracking is in
-	// memory, so a restart gives every article a fresh set of attempts.
-	CrawlMaxAttempts = getEnvInt("CRAWL_MAX_ATTEMPTS", 3)
+	// CrawlMaxAttempts bounds the retry backoff exponent: after this many
+	// consecutive failures the delay stops doubling and sits at
+	// CrawlRetryBackoffMax. Articles are never abandoned outright — a crawler
+	// that writes off every article has no work left to do.
+	CrawlMaxAttempts = getEnvInt("CRAWL_MAX_ATTEMPTS", 5)
+
+	// CrawlRetryBackoff is the delay before a failed article is retried; it
+	// doubles with each consecutive failure.
+	CrawlRetryBackoff = getEnvDuration("CRAWL_RETRY_BACKOFF", 15*time.Minute, time.Second)
+
+	// CrawlRetryBackoffMax caps that delay.
+	CrawlRetryBackoffMax = getEnvDuration("CRAWL_RETRY_BACKOFF_MAX", 6*time.Hour, time.Second)
 )
 
 func getEnv(key string, fallback string) string {

@@ -3,48 +3,58 @@ package background
 import (
 	"errors"
 	"log/slog"
-	"sync"
+	"time"
 
 	"github.com/aidenappl/SentimentScraperAPI/db"
 	"github.com/aidenappl/SentimentScraperAPI/env"
 	"github.com/aidenappl/SentimentScraperAPI/logging"
 	"github.com/aidenappl/SentimentScraperAPI/query"
+	"github.com/aidenappl/SentimentScraperAPI/retry"
 	"github.com/aidenappl/SentimentScraperAPI/scraper"
 	"github.com/aidenappl/SentimentScraperAPI/structs"
 	"github.com/aidenappl/SentimentScraperAPI/tools"
 )
 
-// attempts tracks consecutive crawl failures per news item so a permanently
-// unreachable article stops being retried every cycle.
+// retries schedules re-attempts for articles that failed to scrape.
 //
-// This is deliberately in memory: it needs no migration, and a restart giving
-// every article a fresh set of attempts is the desired behaviour — a deploy
-// is usually what fixes a broken parser.
-var attempts sync.Map // news item ID -> int
+// State is in memory by design: it needs no migration, and a restart giving
+// every article a fresh start is usually what you want, since a deploy is
+// what fixes a broken parser.
+var retries = retry.New(env.CrawlRetryBackoff, env.CrawlRetryBackoffMax, env.CrawlMaxAttempts)
 
 // CheckCrawlers fetches articles that have no body content yet and attempts to
 // scrape each one.
 //
-// Per-item lines are logged at Debug and counted into the crawl summary. An
-// article that cannot be scraped is never written back with an empty body:
-// doing so would leave it matching the "needs crawling" filter forever, which
-// is what made this loop re-fetch the same articles every cycle indefinitely.
+// Articles in retry backoff are excluded from the query rather than filtered
+// after it. The listing is ordered newest-first and the batch is capped, so
+// filtering afterwards would hand back the same failing rows every cycle and
+// the crawler would never reach the rest of the backlog.
 func CheckCrawlers() {
 	slog.Debug("checking for news items that need crawling")
+
+	now := time.Now()
+	deferred := retries.Deferred(now)
+
+	total, err := query.CountNewsNeedingCrawl(db.DB)
+	if err != nil {
+		slog.Error("failed to count crawl backlog", "reason", "query", "err", err)
+	} else {
+		logging.Crawl.SetBacklog(total)
+	}
+	logging.Crawl.SetDeferred(len(deferred))
 
 	news, err := query.ListNews(db.DB, query.ListNewsRequest{
 		HasBodyContent: tools.BoolP(false),
 		Limit:          tools.IntP(env.CrawlBatchLimit),
+		ExcludeIDs:     deferred,
 	})
 	if err != nil {
 		slog.Error("failed to list news items for crawling", "reason", "query", "err", err)
 		return
 	}
 
-	logging.Crawl.SetBacklog(len(news))
-
 	if len(news) == 0 {
-		slog.Debug("no news items require crawling")
+		slog.Debug("no news items are due for crawling", "backlog", total, "deferred", len(deferred))
 		return
 	}
 
@@ -55,9 +65,10 @@ func CheckCrawlers() {
 
 		id, articleURL := *item.ID, *item.ArticleURL
 
-		if failed, _ := attempts.Load(id); failed != nil && failed.(int) >= env.CrawlMaxAttempts {
+		// Belt and braces: the query already excluded these, but the tracker
+		// is the authority on eligibility.
+		if !retries.Ready(id, time.Now()) {
 			logging.Crawl.IncSkipped()
-			slog.Debug("skipping news item past its attempt limit", "news_id", id, "url", articleURL)
 			continue
 		}
 
@@ -66,7 +77,7 @@ func CheckCrawlers() {
 
 		article, err := scraper.Scrape(articleURL)
 		if err != nil {
-			recordFailure(id)
+			retries.Fail(id, time.Now())
 
 			// Scrape already logged and counted the fetch failure; an empty
 			// body is the one outcome it cannot count, since it is not a
@@ -86,23 +97,14 @@ func CheckCrawlers() {
 				Authors:     &article.AuthorName,
 			},
 		}); err != nil {
-			recordFailure(id)
+			retries.Fail(id, time.Now())
 			logging.Crawl.IncFailure("update")
 			slog.Error("failed to update news item", "reason", "update", "news_id", id, "err", err)
 			continue
 		}
 
-		attempts.Delete(id)
+		retries.Succeed(id)
 		logging.Crawl.IncScraped()
 		slog.Debug("scraped news item", "news_id", id, "chars", len(article.ArticleBody))
 	}
-}
-
-func recordFailure(id int) {
-	prior, _ := attempts.Load(id)
-	count := 1
-	if prior != nil {
-		count = prior.(int) + 1
-	}
-	attempts.Store(id, count)
 }

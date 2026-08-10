@@ -17,6 +17,11 @@ type ListNewsRequest struct {
 
 	HasBodyContent *bool `json:"has_body_content"`
 
+	// ExcludeIDs drops specific rows from the result. The crawler uses it to
+	// skip articles that are in retry backoff, so a batch is filled with
+	// articles it can actually attempt rather than the same failing rows.
+	ExcludeIDs []int `json:"-"`
+
 	// Selectors
 	ID *int `json:"id"`
 }
@@ -111,6 +116,10 @@ func ListNews(dbc db.Queryable, req ListNewsRequest) ([]structs.News, error) {
 
 	if req.HasBodyContent != nil && !*req.HasBodyContent {
 		q = q.Where(sq.Or{sq.Eq{"n.body_content": nil}, sq.Eq{"n.body_content": ""}})
+	}
+
+	if len(req.ExcludeIDs) > 0 {
+		q = q.Where(sq.NotEq{"n.id": req.ExcludeIDs})
 	}
 
 	query, args, err := q.ToSql()
