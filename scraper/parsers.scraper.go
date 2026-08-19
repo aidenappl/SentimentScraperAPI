@@ -3,6 +3,7 @@ package scraper
 import (
 	"encoding/json"
 	"strings"
+	"unicode"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gocolly/colly"
@@ -97,6 +98,7 @@ var bodyCandidates = []string{
 	"[itemprop='articleBody']",
 	"article [class*='article-body']",
 	"article [class*='articleBody']",
+	"div[class*='articleBody']",
 	"div[class*='article-body']",
 	"div[class*='story-body']",
 	"div[class*='post-content']",
@@ -171,7 +173,7 @@ func extractDensestText(e *colly.HTMLElement) string {
 
 	for _, selector := range bodyCandidates {
 		e.DOM.Find(selector).Each(func(_ int, sel *goquery.Selection) {
-			if text := paragraphText(sel); len(text) > len(best) {
+			if text := containerText(sel); len(text) > len(best) {
 				best = text
 			}
 		})
@@ -187,6 +189,53 @@ func extractDensestText(e *colly.HTMLElement) string {
 	}
 
 	return best
+}
+
+// containerText extracts the readable text of a candidate container.
+//
+// Paragraphs are preferred because they preserve article structure, but a
+// growing number of outlets render body copy in divs and spans with no <p> at
+// all — CNBC's markets-movers pages have zero, aboutamazon.com has two for a
+// 4,800-character article. When paragraphs come up short the whole container
+// is taken instead, with boilerplate regions stripped first.
+func containerText(sel *goquery.Selection) string {
+	if text := paragraphText(sel); len(text) >= MinBodyLength {
+		return text
+	}
+
+	stripped := sel.Clone()
+	stripped.Find(strings.Join(boilerplateAncestors, ",")).Remove()
+
+	return collapseWhitespace(stripped.Text())
+}
+
+// collapseWhitespace turns the ragged whitespace of raw markup into single
+// spaces, and blank-line runs into paragraph breaks.
+func collapseWhitespace(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+
+	var pendingNewlines, pendingSpace int
+	for _, r := range s {
+		switch {
+		case r == '\n' || r == '\r':
+			pendingNewlines++
+		case unicode.IsSpace(r):
+			pendingSpace++
+		default:
+			if b.Len() > 0 {
+				if pendingNewlines >= 2 {
+					b.WriteString("\n\n")
+				} else if pendingNewlines > 0 || pendingSpace > 0 {
+					b.WriteByte(' ')
+				}
+			}
+			pendingNewlines, pendingSpace = 0, 0
+			b.WriteRune(r)
+		}
+	}
+
+	return strings.TrimSpace(b.String())
 }
 
 // paragraphText joins the <p> text inside sel, skipping boilerplate regions

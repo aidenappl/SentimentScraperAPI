@@ -15,7 +15,7 @@ general-purpose crawler: it only fetches URLs that arrived via the brief feed.
 
 ## 2. Stack & dependencies
 
-- **Go 1.23.4**, module `github.com/aidenappl/SentimentScraperAPI`
+- **Go 1.25**, module `github.com/aidenappl/SentimentScraperAPI`
 - **PostgreSQL** via `lib/pq` — note this service is Postgres, not MariaDB;
   all queries use `$1` placeholders (`sq.Dollar`)
 - **`gorilla/mux`** router, **`rs/cors`** for CORS
@@ -49,7 +49,7 @@ tools/           Small helpers (pointer conversion, user agents)
 
 ## 4. Running, building & testing
 
-Prerequisites: Go 1.23+, a reachable Postgres, and a `.env` with `CORE_DB`,
+Prerequisites: Go 1.25+, a reachable Postgres, and a `.env` with `CORE_DB`,
 `OPENAI_KEY` and `PORT`.
 
 ```bash
@@ -122,10 +122,17 @@ byline is recovered from JSON-LD or meta tags. A hardcoded `"TechCrunch"`
 author looks filled, suppresses that recovery, and silently misattributes every
 article — which is exactly what happened before this rule existed.
 
-**Blocked outlets are ingested but never crawled.** Some outlets answer every
-request with 401 no matter what headers are sent. They are excluded from the
-crawl query and from the backlog count, so the backlog stays a meaningful
-health signal instead of resting permanently on an uncrawlable residue.
+**Uncrawlable URLs are ingested but never crawled.** Two kinds: outlets that
+answer every request with 401 regardless of headers, and links to files rather
+than pages (the feed carries PDFs). Both are excluded from the crawl query and
+from the backlog count via `scraper.ExcludedURLPatterns`, so the backlog stays
+a meaningful health signal instead of resting permanently on a residue nothing
+can drain.
+
+**The extractor must not assume `<p>` tags.** A growing share of outlets render
+body copy in divs and spans — CNBC's markets-movers pages have zero paragraphs,
+aboutamazon.com has two for a 4,800-character article. `containerText` prefers
+paragraphs and falls back to the whole container with boilerplate stripped.
 
 ## 6. Domain & architecture
 
@@ -170,7 +177,10 @@ figure. A result under `MinBodyLength` is treated as no article at all.
 **Ingest hygiene.** Feed URLs are passed through `tools.NormalizeURL` before
 they are cached or stored: the feed intermittently appends stray characters
 (a trailing backtick arriving as `%60`, for instance), and storing one verbatim
-turns a live article into a permanent 404 no parser can rescue.
+turns a live article into a permanent 404 no parser can rescue. `CheckCrawlers`
+also repairs rows stored before that existed — if a URL normalises to something
+different it rewrites the row before crawling, so the corruption heals as the
+backlog is worked rather than needing a manual `UPDATE`.
 
 To check extraction against real pages when adding a parser or chasing a
 persistent `items_empty` count, use the live-check tool — it is excluded from

@@ -29,6 +29,36 @@ func SetBlockedDomains(domains []string) {
 	BlockedDomains = cleaned
 }
 
+// nonHTMLExtensions are file types the feed links to that an HTML parser can
+// never extract text from. They are skipped rather than retried forever.
+var nonHTMLExtensions = []string{
+	".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+	".zip", ".csv", ".mp3", ".mp4", ".jpg", ".jpeg", ".png", ".gif",
+}
+
+// IsNonHTML reports whether a URL points at a file rather than a web page.
+func IsNonHTML(rawURL string) bool {
+	u, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return false
+	}
+
+	path := strings.ToLower(u.Path)
+	for _, ext := range nonHTMLExtensions {
+		if strings.HasSuffix(path, ext) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// SkipCrawl reports whether a URL should never be handed to the crawler,
+// either because the outlet blocks us or because it is not a web page.
+func SkipCrawl(rawURL string) bool {
+	return IsBlocked(rawURL) || IsNonHTML(rawURL)
+}
+
 // IsBlocked reports whether a URL belongs to a blocked outlet.
 func IsBlocked(rawURL string) bool {
 	u, err := url.Parse(strings.TrimSpace(rawURL))
@@ -48,17 +78,23 @@ func IsBlocked(rawURL string) bool {
 	return false
 }
 
-// BlockedURLPatterns renders the blocklist as SQL LIKE patterns for excluding
-// blocked outlets from a query.
+// ExcludedURLPatterns renders everything the crawler should never fetch as SQL
+// LIKE patterns: blocked outlets and non-HTML file types.
 //
 // The exclusion has to happen in SQL rather than after the fact: the crawl
 // listing is ordered newest-first and capped, so filtering afterwards would
-// hand back a batch made entirely of blocked rows and starve everything else.
-func BlockedURLPatterns() []string {
-	patterns := make([]string, 0, len(BlockedDomains)*2)
+// hand back a batch made entirely of excluded rows and starve everything else.
+func ExcludedURLPatterns() []string {
+	patterns := make([]string, 0, len(BlockedDomains)*2+len(nonHTMLExtensions)*2)
+
 	for _, domain := range BlockedDomains {
 		// Matches https://domain/... and https://any.sub.domain/...
 		patterns = append(patterns, "%//"+domain+"/%", "%."+domain+"/%")
+	}
+
+	for _, ext := range nonHTMLExtensions {
+		// Bare path, and path followed by a query string.
+		patterns = append(patterns, "%"+ext, "%"+ext+"?%")
 	}
 
 	return patterns

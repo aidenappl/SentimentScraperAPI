@@ -35,9 +35,9 @@ func CheckCrawlers() {
 
 	now := time.Now()
 	deferred := retries.Deferred(now)
-	blocked := scraper.BlockedURLPatterns()
+	excluded := scraper.ExcludedURLPatterns()
 
-	total, err := query.CountNewsNeedingCrawl(db.DB, blocked)
+	total, err := query.CountNewsNeedingCrawl(db.DB, excluded)
 	if err != nil {
 		slog.Error("failed to count crawl backlog", "reason", "query", "err", err)
 	} else {
@@ -49,7 +49,7 @@ func CheckCrawlers() {
 		HasBodyContent:     tools.BoolP(false),
 		Limit:              tools.IntP(env.CrawlBatchLimit),
 		ExcludeIDs:         deferred,
-		ExcludeURLPatterns: blocked,
+		ExcludeURLPatterns: excluded,
 	})
 	if err != nil {
 		slog.Error("failed to list news items for crawling", "reason", "query", "err", err)
@@ -73,6 +73,22 @@ func CheckCrawlers() {
 		if !retries.Ready(id, time.Now()) {
 			logging.Crawl.IncSkipped()
 			continue
+		}
+
+		// Repair URLs that were stored before ingest sanitising existed. A
+		// trailing backtick is a permanent 404 no parser can rescue, and only
+		// a write fixes it — NormalizeURL on the way in cannot reach rows that
+		// are already in the table.
+		if normalized := tools.NormalizeURL(articleURL); normalized != articleURL {
+			if err := query.UpdateNews(db.DB, query.UpdateNewsRequest{
+				ID:   id,
+				News: structs.News{ArticleURL: &normalized},
+			}); err != nil {
+				slog.Error("failed to repair article url", "reason", "update", "news_id", id, "err", err)
+			} else {
+				slog.Info("repaired malformed article url", "news_id", id, "from", articleURL, "to", normalized)
+				articleURL = normalized
+			}
 		}
 
 		logging.Crawl.IncFound()

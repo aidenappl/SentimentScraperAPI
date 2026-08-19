@@ -52,7 +52,7 @@ func NewsFilter() {
 		// not attempted at all — they are ingested for their headline and
 		// symbols, and never crawled.
 		var body, authors string
-		if !scraper.IsBlocked(item.Article.URL) {
+		if !scraper.SkipCrawl(item.Article.URL) {
 			if article, err := scraper.Scrape(item.Article.URL); err == nil {
 				body, authors = article.ArticleBody, article.AuthorName
 			}

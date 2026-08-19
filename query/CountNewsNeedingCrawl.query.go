@@ -23,7 +23,7 @@ func CountNewsNeedingCrawl(dbc db.Queryable, excludeURLPatterns []string) (int, 
 		Where(sq.Or{sq.Eq{"n.body_content": nil}, sq.Eq{"n.body_content": ""}})
 
 	for _, pattern := range excludeURLPatterns {
-		q = q.Where(sq.NotLike{"n.article_url": pattern})
+		q = q.Where(sq.NotILike{"n.article_url": pattern})
 	}
 
 	query, args, err := q.ToSql()

@@ -127,7 +127,7 @@ func ListNews(dbc db.Queryable, req ListNewsRequest) ([]structs.News, error) {
 	}
 
 	for _, pattern := range req.ExcludeURLPatterns {
-		q = q.Where(sq.NotLike{"n.article_url": pattern})
+		q = q.Where(sq.NotILike{"n.article_url": pattern})
 	}
 
 	query, args, err := q.ToSql()

@@ -210,6 +210,85 @@ func TestNamedParserGapsAreFilledByGeneric(t *testing.T) {
 	}
 }
 
+// Regression guard: the extractor was <p>-only, so outlets that render body
+// copy in divs yielded nothing. CNBC's markets-movers pages have zero <p>
+// tags and aboutamazon.com has two for a 4,800-character article; both were
+// counted as empty and retried forever.
+func TestScrapeExtractsDivBasedBody(t *testing.T) {
+	body := longBody("Check out the companies making headlines in extended trading.")
+	url := serve(t, `<html><head><title>Movers</title></head><body>
+	<nav><div>`+longBody("Navigation filler.")+`</div></nav>
+	<article><div class="ArticleBody-articleBody">
+		<div>`+body+`</div>
+		<span>`+longBody("A second block of body copy.")+`</span>
+	</div></article>
+	<footer><div>`+longBody("Footer boilerplate.")+`</div></footer>
+	</body></html>`)
+
+	article, err := Scrape(url)
+	if err != nil {
+		t.Fatalf("Scrape returned an error: %v", err)
+	}
+
+	if !strings.Contains(article.ArticleBody, "companies making headlines") {
+		t.Errorf("div-based body was not extracted, got %q", article.ArticleBody)
+	}
+	if !strings.Contains(article.ArticleBody, "second block of body copy") {
+		t.Errorf("only part of the container was extracted, got %q", article.ArticleBody)
+	}
+	if strings.Contains(article.ArticleBody, "Navigation filler") ||
+		strings.Contains(article.ArticleBody, "Footer boilerplate") {
+		t.Errorf("boilerplate leaked into the body, got %q", article.ArticleBody)
+	}
+}
+
+// Paragraph markup must still win, so well-structured articles keep their
+// paragraph breaks rather than collapsing into one run of text.
+func TestParagraphMarkupIsPreferred(t *testing.T) {
+	url := serve(t, `<html><body><article>
+	<p>`+longBody("First paragraph.")+`</p>
+	<p>`+longBody("Second paragraph.")+`</p>
+	</article></body></html>`)
+
+	article, err := Scrape(url)
+	if err != nil {
+		t.Fatalf("Scrape returned an error: %v", err)
+	}
+
+	if !strings.Contains(article.ArticleBody, "\n\n") {
+		t.Errorf("paragraph separation was lost, got %q", article.ArticleBody)
+	}
+}
+
+func TestCollapseWhitespace(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"runs of spaces", "one   two\t\tthree", "one two three"},
+		{"single newline becomes a space", "one\ntwo", "one two"},
+		{"blank line becomes a paragraph break", "one\n\n\ntwo", "one\n\ntwo"},
+		{"leading and trailing trimmed", "\n\n  text  \n\n", "text"},
+		{"empty", "   \n  ", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := collapseWhitespace(tt.in); got != tt.want {
+				t.Fatalf("collapseWhitespace(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestScrapeSkipsNothingForOrdinaryArticles(t *testing.T) {
+	// A sanity check that the non-HTML guard does not reject normal pages.
+	if SkipCrawl("https://www.cnbc.com/2026/08/09/story.html") {
+		t.Fatal("an ordinary article must not be skipped")
+	}
+}
+
 func TestScrapeShortBodyIsEmptyError(t *testing.T) {
 	// A consent wall: fetched fine, but there is no article here. It must not
 	// come back as a success, or it would be persisted as an empty body and

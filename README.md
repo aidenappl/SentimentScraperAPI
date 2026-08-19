@@ -14,9 +14,10 @@ a small read-only HTTP API.
 
 Article extraction is domain-aware: known outlets get purpose-built parsers,
 and everything else falls through to a generic extractor that reads schema.org
-JSON-LD or picks the densest block of paragraph text on the page — so no URL is
-ever left unparsed. Outlets behind hard paywalls are ingested for their
-headline and symbols but never crawled.
+JSON-LD or picks the densest readable block on the page — so no URL is ever
+left unparsed. URLs that cannot yield an article at all, whether an outlet
+behind a hard paywall or a link to a PDF, are ingested for their headline and
+symbols but never crawled.
 
 ## Role in the Sentiment Scraper ecosystem
 
@@ -26,14 +27,14 @@ healthchecks.io.
 
 ## Tech stack
 
-Go 1.23 · PostgreSQL (`lib/pq`) · gorilla/mux · squirrel · gocolly/colly ·
+Go 1.25 · PostgreSQL (`lib/pq`) · gorilla/mux · squirrel · gocolly/colly ·
 goquery · log/slog · VADER + a custom classifier for sentiment
 
 ## Getting started
 
 ### Prerequisites
 
-- Go 1.23+
+- Go 1.25+
 - A reachable PostgreSQL instance
 - A `.env` file with `CORE_DB`, `OPENAI_KEY` and `PORT`
 
