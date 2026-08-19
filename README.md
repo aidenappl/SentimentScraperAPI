@@ -36,7 +36,7 @@ goquery · log/slog · VADER + a custom classifier for sentiment
 
 - Go 1.25+
 - A reachable PostgreSQL instance
-- A `.env` file with `CORE_DB`, `OPENAI_KEY` and `PORT`
+- A `.env` file with `CORE_DB` and `PORT`
 
 ### Setup
 
@@ -67,7 +67,6 @@ Tests need neither network nor database — the crawler tests run against local
 | Variable | Default | Purpose |
 |---|---|---|
 | `CORE_DB` | — (required) | Postgres DSN |
-| `OPENAI_KEY` | — (required) | Currently unused |
 | `PORT` | `8000` | Listen port |
 | `LOG_LEVEL` | `INFO` | `DEBUG` restores per-item crawl lines |
 | `LOG_SUMMARY_INTERVAL` | `5m` | Crawl summary cadence and error dedup window |

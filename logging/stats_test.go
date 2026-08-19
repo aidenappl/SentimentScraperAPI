@@ -36,7 +36,7 @@ func TestStatsSnapshotDrainsCounters(t *testing.T) {
 	s.IncFailure("timeout")
 	s.SetBacklog(7)
 
-	found, scraped, empty, skipped, backlog, _, failures := s.snapshot()
+	found, scraped, empty, skipped, _, backlog, _, failures := s.snapshot()
 
 	if found != 2 || scraped != 1 || empty != 1 || skipped != 1 {
 		t.Fatalf("got found=%d scraped=%d empty=%d skipped=%d, want 2/1/1/1", found, scraped, empty, skipped)
@@ -49,7 +49,7 @@ func TestStatsSnapshotDrainsCounters(t *testing.T) {
 	}
 
 	// A second snapshot must come back empty; counters reset on read.
-	found, scraped, empty, skipped, backlog, _, failures = s.snapshot()
+	found, scraped, empty, skipped, _, backlog, _, failures = s.snapshot()
 	if found != 0 || scraped != 0 || empty != 0 || skipped != 0 || len(failures) != 0 {
 		t.Fatalf("counters not reset: found=%d scraped=%d empty=%d skipped=%d failures=%v",
 			found, scraped, empty, skipped, failures)

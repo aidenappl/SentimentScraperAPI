@@ -33,7 +33,6 @@ main.go          Wiring: logger, DB ping, goroutines, routes, graceful shutdown
 background/      Long-running work: feed polling, crawl loop, health pings
 db/              Connection, Queryable interface, pagination constants
 env/             Environment variable parsing
-gpt/             DEAD CODE — nothing imports it (see Rules)
 logging/         slog setup, crawl summary counters, error dedup handler
 middleware/      Request logging
 query/           One file per query, squirrel-built
@@ -49,8 +48,8 @@ tools/           Small helpers (pointer conversion, user agents)
 
 ## 4. Running, building & testing
 
-Prerequisites: Go 1.25+, a reachable Postgres, and a `.env` with `CORE_DB`,
-`OPENAI_KEY` and `PORT`.
+Prerequisites: Go 1.25+, a reachable Postgres, and a `.env` with `CORE_DB`
+and `PORT`.
 
 ```bash
 dev          # go run .
@@ -70,7 +69,6 @@ network or database.
 | Variable | Default | Purpose |
 |---|---|---|
 | `CORE_DB` | — (required) | Postgres DSN |
-| `OPENAI_KEY` | — (required) | Unused; see Rules |
 | `PORT` | `8000` | Listen port |
 | `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARN`, `ERROR` |
 | `LOG_SUMMARY_INTERVAL` | `5m` | Crawl summary cadence and error dedup window |
@@ -80,6 +78,8 @@ network or database.
 | `CRAWL_RETRY_BACKOFF` | `15m` | First retry delay after a failure; doubles each time |
 | `CRAWL_RETRY_BACKOFF_MAX` | `6h` | Ceiling on that delay |
 | `CRAWL_BLOCKED_DOMAINS` | built-in list | Comma-separated outlets to ingest but never crawl; `none` disables blocking |
+
+Only `CORE_DB` is required; `env.Validate()` checks it at startup.
 
 Bad values fall back to the default rather than stopping the service — a typo
 in `LOG_LEVEL` must never prevent a boot.
@@ -159,10 +159,16 @@ Two details here are load-bearing, and both were learned by getting them wrong:
   listing is ordered `posted_at DESC` and the batch is capped, so filtering
   after the query returns the same failing rows every cycle and the crawler
   never reaches the rest of the backlog.
-- **Failures back off; they are never abandoned.** Permanently skipping an
-  article after N failures ends with every article written off and the crawler
-  idle with a full backlog. Delays double from `CRAWL_RETRY_BACKOFF` up to
-  `CRAWL_RETRY_BACKOFF_MAX` and stay there.
+- **Failures back off; they are not abandoned on a count.** Permanently
+  skipping an article after N failures ends with every article written off and
+  the crawler idle with a full backlog. Delays double from
+  `CRAWL_RETRY_BACKOFF` up to `CRAWL_RETRY_BACKOFF_MAX` and stay there.
+  The one exception is a *permanent* status — 404 or 410, meaning the publisher
+  deleted the article. Those are retired via `retry.MarkDead` and dropped from
+  both the batch and the backlog count, because no number of retries will bring
+  a deleted page back and leaving them in holds the backlog above zero forever.
+  Note the distinction: retirement is driven by what the server said, never by
+  how many times we have tried.
 
 Retry state is in memory, so a restart gives every article a fresh start —
 usually what you want, since a deploy is what fixes a bad parser.
@@ -235,6 +241,8 @@ health signal:
 - `fail_forbidden` or `fail_http_401` concentrated on one domain means that
   outlet is blocking us or is paywalled. If it is unfixable, add it to
   `CRAWL_BLOCKED_DOMAINS` rather than letting it retry forever.
+- `items_dead` counts articles retired after a 404 or 410. A publisher deleted
+  them; they are dropped from the backlog so it can still reach zero.
 - `no article body extracted` warnings are deduplicated per domain and name the
   outlets the extractor cannot handle — the input to the next parser fix.
 
@@ -252,14 +260,17 @@ carries `news_id`.
 - **Do not report a capped batch length as a gauge.** Count the real thing, or
   the metric silently reads back the cap you set.
 - **Do not add a package-level `env` var to a package you want to test.**
-  `env` panics at init without `CORE_DB`, so importing it makes the package
-  untestable — this is why `retry/` is standalone.
+  `env` no longer panics at init — required variables are checked by
+  `env.Validate()` from `main`, so importing `env` is safe from a test binary.
+  Keep it that way: a panic during package initialisation fires before
+  `TestMain` and makes every importing package impossible to test.
 - **Do not use `log.Fatal` outside startup.** `slog.SetLogLoggerLevel` routes
   stdlib `log` to Debug, so a `log.Fatal` would exit the process while printing
   nothing. Use `logging.Fatal`, and never from inside an HTTP handler.
-- `gpt/` is dead code and `OPENAI_KEY` is still required by `env`, so the
-  service will not boot without a key it never uses. Removing both is safe but
-  has not been done.
+- **Do not reintroduce an OpenAI dependency casually.** The `gpt/` package was
+  removed as dead code; it forced `OPENAI_KEY` to be set for a feature nothing
+  called, which meant a live credential sat in the deployment config for no
+  reason. Sentiment scoring runs locally on VADER and the bundled classifier.
 - `state.NewsCache` is not mutex-protected; it is currently safe only because a
   single goroutine touches it. Add a `sync.RWMutex` before sharing it.
 

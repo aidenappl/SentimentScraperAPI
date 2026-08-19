@@ -15,12 +15,16 @@ import (
 // Blocked outlets are excluded because they can never be crawled — counting
 // them would hold the backlog permanently above zero and destroy its value as
 // a health signal.
-func CountNewsNeedingCrawl(dbc db.Queryable, excludeURLPatterns []string) (int, error) {
+func CountNewsNeedingCrawl(dbc db.Queryable, excludeIDs []int, excludeURLPatterns []string) (int, error) {
 	psql := sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
 	q := psql.Select("COUNT(*)").
 		From("website.news n").
 		Where(sq.Or{sq.Eq{"n.body_content": nil}, sq.Eq{"n.body_content": ""}})
+
+	if len(excludeIDs) > 0 {
+		q = q.Where(sq.NotEq{"n.id": excludeIDs})
+	}
 
 	for _, pattern := range excludeURLPatterns {
 		q = q.Where(sq.NotILike{"n.article_url": pattern})

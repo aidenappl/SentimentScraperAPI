@@ -4,13 +4,16 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
 var (
-	CoreDB    = getEnvOrPanic("CORE_DB")
-	OpenAIKey = getEnvOrPanic("OPENAI_KEY")
-	Port      = getEnv("PORT", "8000")
+	// CoreDB is validated by Validate rather than at package init. Panicking
+	// here would make every package that imports env impossible to unit test,
+	// since package initialisation runs before TestMain.
+	CoreDB = getEnv("CORE_DB", "")
+	Port   = getEnv("PORT", "8000")
 
 	// LogLevel is DEBUG, INFO, WARN or ERROR. Per-item crawl lines are logged
 	// at DEBUG, so INFO leaves only summaries, errors and lifecycle events.
@@ -83,10 +86,20 @@ func getEnvInt(key string, fallback int) int {
 	return n
 }
 
-func getEnvOrPanic(key string) string {
-	value, ok := os.LookupEnv(key)
-	if !ok {
-		panic(fmt.Sprintf("❌ missing required environment variable: '%v'\n", key))
+// Validate reports the first missing required variable. Call it once at
+// startup: failing here gives a clear message and a clean exit, where a panic
+// during package initialisation would fire before main and take every test
+// binary with it.
+func Validate() error {
+	required := map[string]string{
+		"CORE_DB": CoreDB,
 	}
-	return value
+
+	for key, value := range required {
+		if strings.TrimSpace(value) == "" {
+			return fmt.Errorf("missing required environment variable %q", key)
+		}
+	}
+
+	return nil
 }

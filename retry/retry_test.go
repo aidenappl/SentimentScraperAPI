@@ -116,6 +116,34 @@ func TestRetryDeferredIsBounded(t *testing.T) {
 	}
 }
 
+func TestMarkDeadRemovesFromRotation(t *testing.T) {
+	tr := New(time.Minute, time.Hour, 5)
+
+	tr.Fail(1, base)
+	tr.MarkDead(1)
+
+	if got := tr.Dead(); len(got) != 1 || got[0] != 1 {
+		t.Fatalf("got dead=%v, want [1]", got)
+	}
+
+	// A dead item must not also appear as merely deferred, or it would be
+	// double-counted against the backlog.
+	if got := tr.Deferred(base); len(got) != 0 {
+		t.Fatalf("got deferred=%v, want empty once marked dead", got)
+	}
+}
+
+func TestSucceedRevivesDeadItem(t *testing.T) {
+	tr := New(time.Minute, time.Hour, 5)
+
+	tr.MarkDead(1)
+	tr.Succeed(1)
+
+	if got := tr.Dead(); len(got) != 0 {
+		t.Fatalf("got dead=%v, want empty after a success", got)
+	}
+}
+
 func TestRetryTrackerDefaults(t *testing.T) {
 	// Nonsense configuration must not produce a zero or negative delay, which
 	// would make every failure retry immediately and spin the crawler.

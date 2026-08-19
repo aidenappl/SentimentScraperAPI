@@ -24,6 +24,7 @@ type Stats struct {
 	scraped atomic.Int64
 	empty   atomic.Int64
 	skipped atomic.Int64
+	dead    atomic.Int64
 
 	// backlog and deferred are gauges, not counters: they are not reset on
 	// snapshot. Together they distinguish an idle crawler from a wedged one —
@@ -44,6 +45,9 @@ func (s *Stats) IncFound()   { s.found.Add(1) }
 func (s *Stats) IncScraped() { s.scraped.Add(1) }
 func (s *Stats) IncEmpty()   { s.empty.Add(1) }
 func (s *Stats) IncSkipped() { s.skipped.Add(1) }
+
+// IncDead counts an article retired as permanently unavailable.
+func (s *Stats) IncDead() { s.dead.Add(1) }
 
 // SetBacklog records the total number of articles still awaiting a body.
 // This is a count over the whole table, not the size of the current batch —
@@ -67,11 +71,12 @@ func (s *Stats) IncFailure(reason string) {
 // interval. The gap between the atomic swaps and the map swap means an event
 // landing mid-snapshot is counted in the next interval; totals are still
 // conserved, which is all a summary line needs.
-func (s *Stats) snapshot() (found, scraped, empty, skipped, backlog, deferred int64, failures map[string]int64) {
+func (s *Stats) snapshot() (found, scraped, empty, skipped, dead, backlog, deferred int64, failures map[string]int64) {
 	found = s.found.Swap(0)
 	scraped = s.scraped.Swap(0)
 	empty = s.empty.Swap(0)
 	skipped = s.skipped.Swap(0)
+	dead = s.dead.Swap(0)
 	backlog = s.backlog.Load()
 	deferred = s.deferred.Load()
 
@@ -80,7 +85,7 @@ func (s *Stats) snapshot() (found, scraped, empty, skipped, backlog, deferred in
 	s.failures = make(map[string]int64, len(failures))
 	s.mu.Unlock()
 
-	return found, scraped, empty, skipped, backlog, deferred, failures
+	return found, scraped, empty, skipped, dead, backlog, deferred, failures
 }
 
 // Run emits a summary line every interval until ctx is cancelled, then emits
@@ -108,7 +113,7 @@ func (s *Stats) Run(ctx context.Context, interval time.Duration) {
 // missing line is ambiguous between "idle" and "dead", and the backlog gauge
 // is what tells those apart.
 func (s *Stats) emit(interval time.Duration, kind string) {
-	found, scraped, empty, skipped, backlog, deferred, failures := s.snapshot()
+	found, scraped, empty, skipped, dead, backlog, deferred, failures := s.snapshot()
 
 	var failed int64
 	for _, n := range failures {
@@ -124,6 +129,7 @@ func (s *Stats) emit(interval time.Duration, kind string) {
 		"items_scraped", scraped,
 		"items_empty", empty,
 		"items_skipped", skipped,
+		"items_dead", dead,
 		"items_failed", failed,
 	}
 

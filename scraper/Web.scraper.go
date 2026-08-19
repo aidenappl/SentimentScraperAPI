@@ -31,6 +31,24 @@ var ErrEmptyBody = errors.New("no article body extracted")
 // can drop it to zero.
 var requestDelay = 5 * time.Second
 
+// FetchError describes a request that failed, carrying the classified reason
+// and status so callers can tell a temporary failure from a permanent one.
+type FetchError struct {
+	Reason string
+	Status int
+	Err    error
+}
+
+func (e *FetchError) Error() string { return e.Reason + ": " + e.Err.Error() }
+func (e *FetchError) Unwrap() error { return e.Err }
+
+// Permanent reports whether retrying could ever succeed. A publisher that has
+// deleted an article will keep saying so, and re-requesting it every backoff
+// window forever holds the backlog above zero for no benefit.
+func (e *FetchError) Permanent() bool {
+	return e.Status == http.StatusNotFound || e.Status == http.StatusGone
+}
+
 // Scrape fetches url and extracts the article.
 //
 // It returns an error for every outcome that did not produce a usable article,
@@ -80,7 +98,7 @@ func Scrape(url string) (*ScrapedArticle, error) {
 
 	c.OnError(func(r *colly.Response, err error) {
 		reason := classifyError(r, err)
-		fetchErr = fmt.Errorf("%s: %w", reason, err)
+		fetchErr = &FetchError{Reason: reason, Status: statusOf(r), Err: err}
 
 		// Count before logging: the summary must not depend on whether this
 		// particular line survived deduplication.
@@ -158,6 +176,14 @@ func classifyError(r *colly.Response, err error) string {
 	default:
 		return "http_" + strconv.Itoa(r.StatusCode)
 	}
+}
+
+func statusOf(r *colly.Response) int {
+	if r == nil {
+		return 0
+	}
+
+	return r.StatusCode
 }
 
 func requestHost(r *colly.Response) string {

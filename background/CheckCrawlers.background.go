@@ -35,9 +35,13 @@ func CheckCrawlers() {
 
 	now := time.Now()
 	deferred := retries.Deferred(now)
+	dead := retries.Dead()
 	excluded := scraper.ExcludedURLPatterns()
 
-	total, err := query.CountNewsNeedingCrawl(db.DB, excluded)
+	// Dead items are excluded from the count as well as the batch. Leaving
+	// them in would hold the backlog permanently above zero and cost it its
+	// value as a health signal.
+	total, err := query.CountNewsNeedingCrawl(db.DB, dead, excluded)
 	if err != nil {
 		slog.Error("failed to count crawl backlog", "reason", "query", "err", err)
 	} else {
@@ -48,7 +52,7 @@ func CheckCrawlers() {
 	news, err := query.ListNews(db.DB, query.ListNewsRequest{
 		HasBodyContent:     tools.BoolP(false),
 		Limit:              tools.IntP(env.CrawlBatchLimit),
-		ExcludeIDs:         deferred,
+		ExcludeIDs:         append(deferred, dead...),
 		ExcludeURLPatterns: excluded,
 	})
 	if err != nil {
@@ -96,6 +100,17 @@ func CheckCrawlers() {
 
 		article, err := scraper.Scrape(articleURL)
 		if err != nil {
+			// A deleted article will answer 404 forever. Retire it rather than
+			// re-requesting it every backoff window for the process lifetime.
+			var fetchErr *scraper.FetchError
+			if errors.As(err, &fetchErr) && fetchErr.Permanent() {
+				retries.MarkDead(id)
+				logging.Crawl.IncDead()
+				slog.Info("retiring permanently unavailable article",
+					"news_id", id, "status", fetchErr.Status, "url", articleURL)
+				continue
+			}
+
 			retries.Fail(id, time.Now())
 
 			// Scrape already logged and counted the fetch failure; an empty

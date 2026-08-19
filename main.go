@@ -28,6 +28,10 @@ import (
 func main() {
 	logging.Init(env.LogLevel, env.LogSummaryInterval)
 
+	if err := env.Validate(); err != nil {
+		logging.Fatal("invalid configuration", "err", err)
+	}
+
 	if env.CrawlBlockedDomains == "none" {
 		scraper.SetBlockedDomains(nil)
 	} else if env.CrawlBlockedDomains != "" {

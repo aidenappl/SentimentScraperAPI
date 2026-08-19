@@ -27,6 +27,7 @@ type Tracker struct {
 
 	mu      sync.Mutex
 	entries map[int]*retryEntry
+	dead    map[int]struct{}
 }
 
 type retryEntry struct {
@@ -50,6 +51,7 @@ func New(base, max time.Duration, maxAttempts int) *Tracker {
 		max:         max,
 		maxAttempts: maxAttempts,
 		entries:     make(map[int]*retryEntry),
+		dead:        make(map[int]struct{}),
 	}
 }
 
@@ -84,6 +86,33 @@ func (t *Tracker) Succeed(id int) {
 	defer t.mu.Unlock()
 
 	delete(t.entries, id)
+	delete(t.dead, id)
+}
+
+// MarkDead records that an item can never succeed — a deleted article, say —
+// so it is dropped from future work entirely rather than retried on a cycle
+// forever. Unlike a backoff this is not time-based, but it is still in-memory:
+// a restart gives every item another chance, which is the right behaviour when
+// the cause might have been a bad deploy rather than a dead URL.
+func (t *Tracker) MarkDead(id int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	delete(t.entries, id)
+	t.dead[id] = struct{}{}
+}
+
+// Dead returns the items marked permanently unavailable.
+func (t *Tracker) Dead() []int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	ids := make([]int, 0, len(t.dead))
+	for id := range t.dead {
+		ids = append(ids, id)
+	}
+
+	return ids
 }
 
 // delayFor doubles the base delay per failure, capped both by maxAttempts
