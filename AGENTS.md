@@ -228,7 +228,9 @@ COMPARE_URL="https://example.com/article" go test ./scraper -tags livecheck -run
   retry, and fails at once on auth errors / any other non-2xx (including
   Lattice 500 and 400 "worker is not connected", whose body is now printed). A
   524 retry can redeploy the same commit twice — harmless. The pushed tag is a
-  plain single-platform manifest (no provenance attestation).
+  plain single-platform manifest (no provenance attestation). The push step
+  runs with `shell: bash` (pipefail): it pipes `docker push` through `tee`, so
+  the implicit `bash -e` would treat a failed push as success.
 - Container healthcheck hits `/health`, which is excluded from request logging
 
 **Reading the logs.** At the default level you should see startup lines, one
