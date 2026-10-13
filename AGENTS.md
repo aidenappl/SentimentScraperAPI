@@ -217,6 +217,18 @@ COMPARE_URL="https://example.com/article" go test ./scraper -tags livecheck -run
 - CI (`.github/workflows/push-to-registry.yml`) builds linux/amd64, pushes
   `registry.appleby.cloud/sentimentscraper:latest`, then calls the Lattice
   deploy URL
+- **Network retries in CI:** the registry and Lattice sit on-prem behind
+  Cloudflare on one WAN and ~5% of requests time out or 522, so every call to
+  them retries: registry login is a shell `docker login --password-stdin` loop
+  (not `docker/login-action`, which cannot retry); the image is built with
+  `load: true, provenance: false` and pushed by a separate `docker push` loop,
+  so a blip retries the push (uploaded layers are skipped), not the build; and
+  the Lattice deploy `curl` retries on curl failure and 408/429/502/503/504/
+  520–524. Each loop makes 5 attempts (5/10/20/40s), emits a `::warning::` per
+  retry, and fails at once on auth errors / any other non-2xx (including
+  Lattice 500 and 400 "worker is not connected", whose body is now printed). A
+  524 retry can redeploy the same commit twice — harmless. The pushed tag is a
+  plain single-platform manifest (no provenance attestation).
 - Container healthcheck hits `/health`, which is excluded from request logging
 
 **Reading the logs.** At the default level you should see startup lines, one
