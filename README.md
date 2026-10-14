@@ -27,14 +27,14 @@ healthchecks.io.
 
 ## Tech stack
 
-Go 1.25 · PostgreSQL (`lib/pq`) · gorilla/mux · squirrel · gocolly/colly ·
+Go 1.26 · PostgreSQL (`lib/pq`) · gorilla/mux · squirrel · gocolly/colly ·
 goquery · log/slog · VADER + a custom classifier for sentiment
 
 ## Getting started
 
 ### Prerequisites
 
-- Go 1.25+
+- Go 1.26+
 - A reachable PostgreSQL instance
 - A `.env` file with `CORE_DB` and `PORT`
 
