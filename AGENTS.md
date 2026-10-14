@@ -15,7 +15,7 @@ general-purpose crawler: it only fetches URLs that arrived via the brief feed.
 
 ## 2. Stack & dependencies
 
-- **Go 1.25**, module `github.com/aidenappl/SentimentScraperAPI`
+- **Go 1.26**, module `github.com/aidenappl/SentimentScraperAPI`
 - **PostgreSQL** via `lib/pq` — note this service is Postgres, not MariaDB;
   all queries use `$1` placeholders (`sq.Dollar`)
 - **`gorilla/mux`** router, **`rs/cors`** for CORS
@@ -48,7 +48,7 @@ tools/           Small helpers (pointer conversion, user agents)
 
 ## 4. Running, building & testing
 
-Prerequisites: Go 1.25+, a reachable Postgres, and a `.env` with `CORE_DB`
+Prerequisites: Go 1.26+, a reachable Postgres, and a `.env` with `CORE_DB`
 and `PORT`.
 
 ```bash
