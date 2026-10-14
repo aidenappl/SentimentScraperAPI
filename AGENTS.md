@@ -212,6 +212,15 @@ COMPARE_URL="https://example.com/article" go test ./scraper -tags livecheck -run
 
 ## 8. Operations
 
+- **CI runners:** every GitHub Actions job runs on `[self-hosted, lattice-worker]` — a
+  single-use runner started by `aidenappl/gh-runner-broker` on the CI host (`aplb-actions`,
+  10.15.10.78), with the toolchain and shared Go/npm caches provisioned by
+  `TeamTrailblaze/runner-setup`. Images build through the host's `lattice-builder` BuildKit
+  (`builder: lattice-builder`), never `docker/setup-buildx-action`, which races other runners
+  on the shared Docker daemon; its local layer cache replaces the gha cache. `setup-go` runs
+  with `cache: false`. Jobs stuck in "Queued" mean the broker or the host is down — check the
+  `gh-runner-broker` service in Monitor (zone `appleby`).
+
 - Deployed via **Lattice stack 11** (`sentimentscraper`), single container on
   worker 2, port 8001
 - CI (`.github/workflows/push-to-registry.yml`) builds linux/amd64, pushes
